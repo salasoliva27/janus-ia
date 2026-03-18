@@ -1,0 +1,11 @@
+{
+  "name": "venture-os-memory",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Cross-workspace semantic memory MCP server for Venture OS",
+  "main": "index.js",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@supabase/supabase-js": "^2.39.0"
+  }
+}

@@ -43,12 +43,27 @@ To add new credentials: Jano adds them to `salasoliva27/dotfiles/.env` → they 
 
 ## HOW TO START EVERY SESSION
 
-1. Read `PROJECTS.md` — know the full portfolio state before doing anything
-2. Read `learnings/patterns.md` — apply accumulated knowledge immediately
-3. Check Google Calendar for today and next 7 days
-4. Scan Gmail for any project-related threads that need attention
-5. Report portfolio status briefly: which projects need Jano's attention today
-6. Then ask: what do you want to work on?
+1. Call `recall("recent venture-os portfolio decisions and status")` — load cross-workspace memory
+2. Call `recall("recent [current project] work")` if opening in a project workspace
+3. Read `PROJECTS.md` — know the full portfolio state
+4. Read `learnings/patterns.md` — apply accumulated knowledge
+5. Check Google Calendar for today and next 7 days
+6. Scan Gmail for any project-related threads that need attention
+7. Report portfolio status briefly: which projects need Jano's attention today
+8. Then ask: what do you want to work on?
+
+## END OF EVERY SESSION
+
+Before closing, always call `remember()` with a session summary:
+```
+remember(
+  content="[what was worked on, decisions made, what's next]",
+  workspace="venture-os",   ← or "lool-ai", "freelance-system", etc. depending on where you are
+  project="[project name]",
+  type="session"
+)
+```
+Also call `remember()` separately for any significant decisions or learnings with type="decision" or type="learning".
 
 ---
 
