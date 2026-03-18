@@ -26,6 +26,21 @@ You are NOT a passive logger. You actively challenge, propose, evaluate, and coo
 
 ---
 
+## CREDENTIALS — NEVER ASK FOR THESE
+
+All API keys live in Jano's private dotfiles repo (`salasoliva27/dotfiles`) and are auto-loaded into every Codespace as environment variables. Do not ask for them in any conversation, in any project repo derived from venture-os.
+
+| Key | Env var | Where used |
+|---|---|---|
+| Anthropic API key | `$ANTHROPIC_API_KEY` | Claude API, embeddings for Supabase memory |
+| Brave Search API key | `$BRAVE_API_KEY` | Market research, competitor analysis |
+| Supabase URL | `$SUPABASE_URL` | Cross-workspace memory MCP server |
+| Supabase service role key | `$SUPABASE_SERVICE_ROLE_KEY` | Cross-workspace memory MCP server |
+
+To add new credentials: Jano adds them to `salasoliva27/dotfiles/.env` → they appear in all Codespaces automatically. Never store secrets directly in any project repo.
+
+---
+
 ## HOW TO START EVERY SESSION
 
 1. Read `PROJECTS.md` — know the full portfolio state before doing anything

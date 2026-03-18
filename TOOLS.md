@@ -23,6 +23,8 @@ All tools are configured once here. Projects declare which tools they need in th
 | Cloudflare | cloudflare | ✅ Installed (needs CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID) | R2 media storage, Workers, KV | lool-ai, campaigns |
 | Notion | notion | ✅ Active (via Claude.ai integration) | Documentation, structured notes | Optional |
 | Supabase Memory | supabase-memory | ⬜ Planned — cross-workspace semantic memory | Conversation history, learning database, RAG across all projects | All |
+| Playwright CLI | CLI — `@playwright/cli` | ✅ Installed globally (`npm i -g @playwright/cli`) | Token-efficient browser automation for agents; better than MCP Playwright for coding agents | freelance-system, lool-ai |
+| UI/UX Pro Max | CLI — `uipro-cli` | ✅ Installed globally (`npm i -g uipro-cli`) | 67 UI styles, 161 palettes, 57 font pairings, industry-specific design system generator. Run: `uipro init --ai claude` in any project. Auto-activates on frontend work. | All frontend projects |
 
 ---
 
