@@ -14,25 +14,12 @@
         "BRAVE_API_KEY": "${BRAVE_API_KEY}"
       }
     },
-    "google-drive": {
+    "google-workspace": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-gdrive"],
+      "args": ["-y", "@googleworkspace/cli", "mcp", "-s", "drive,gmail,calendar,sheets,slides,docs,forms,tasks,chat"],
       "env": {
-        "GDRIVE_CREDENTIALS": "${GDRIVE_CREDENTIALS}"
-      }
-    },
-    "gmail": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-gmail"],
-      "env": {
-        "GMAIL_CREDENTIALS": "${GMAIL_CREDENTIALS}"
-      }
-    },
-    "google-calendar": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-google-calendar"],
-      "env": {
-        "GCAL_CREDENTIALS": "${GCAL_CREDENTIALS}"
+        "GOOGLE_CLIENT_ID": "${GOOGLE_CLIENT_ID}",
+        "GOOGLE_CLIENT_SECRET": "${GOOGLE_CLIENT_SECRET}"
       }
     },
     "filesystem": {

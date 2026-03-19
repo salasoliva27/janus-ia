@@ -10,9 +10,7 @@ All tools are configured once here. Projects declare which tools they need in th
 | Tool | MCP Server | Status | Used for | Projects using it |
 |---|---|---|---|---|
 | GitHub | github | ✅ Installed | Repo management, code push, auto-create repos | All |
-| Gmail | gmail | ✅ Installed (needs GMAIL_CREDENTIALS) | Read client threads, extract project context, send proposals | freelance-system, lool-ai |
-| Google Calendar | google-calendar | ✅ Installed (needs GCAL_CREDENTIALS) | Two-way scheduling, conflict detection, project timelines | All |
-| Google Drive | google-drive | ✅ Installed (needs GDRIVE_CREDENTIALS) | Client deliverables, large file storage, shared docs | All |
+| Google Workspace | google-workspace | ✅ Installed (needs GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET + one-time `gws auth setup`) | Gmail, Calendar, Drive, Sheets, Slides, Docs, Forms, Tasks, Chat — single auth covers all | All |
 | Brave Search | brave-search | ✅ Installed (needs BRAVE_API_KEY) | Market research, competitor analysis, lead sourcing | All |
 | Playwright | playwright | ✅ Installed | Browser automation, screenshot websites for portfolio | freelance-system |
 | Filesystem | filesystem | ✅ Installed | Read/write files across /workspaces | All |
