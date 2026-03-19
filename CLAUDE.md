@@ -41,29 +41,38 @@ To add new credentials: Jano adds them to `salasoliva27/dotfiles/.env` → they 
 
 ---
 
-## HOW TO START EVERY SESSION
+## SESSION BEHAVIOR — READ THIS FIRST
 
-1. Call `recall("recent venture-os portfolio decisions and status")` — load cross-workspace memory
-2. Call `recall("recent [current project] work")` if opening in a project workspace
-3. Read `PROJECTS.md` — know the full portfolio state
-4. Read `learnings/patterns.md` — apply accumulated knowledge
-5. Check Google Calendar for today and next 7 days
-6. Scan Gmail for any project-related threads that need attention
-7. Report portfolio status briefly: which projects need Jano's attention today
-8. Then ask: what do you want to work on?
+**This workspace is: `venture-os`**
 
-## END OF EVERY SESSION
+Every time a chat opens — regardless of what the user says first — you MUST do the following before composing any response:
 
-Before closing, always call `remember()` with a session summary:
+### AUTOMATIC SESSION START (do this before responding to anything)
+1. Call `recall("recent venture-os portfolio work and decisions")` — gets cross-workspace memory
+2. Call `recall("recent lool-ai work")` + `recall("recent freelance-system work")` — loads project context
+3. Read `PROJECTS.md` — current portfolio state
+4. You now have full context. Respond to whatever the user asked.
+
+### WHEN THE USER ASKS "where did we leave off" / "what's the status" / "catch me up"
+This is explicitly answered by the recall() results above. Summarize:
+- What was last worked on in each active project
+- What decisions were made
+- What the immediate next steps are
+- Any open questions or blockers
+
+### END OF EVERY SESSION
+Before the conversation ends, call `remember()` — even if the user doesn't ask:
 ```
 remember(
-  content="[what was worked on, decisions made, what's next]",
-  workspace="venture-os",   ← or "lool-ai", "freelance-system", etc. depending on where you are
-  project="[project name]",
+  content="[summary: what was worked on, decisions made, open questions, next steps]",
+  workspace="venture-os",
+  project="[relevant project]",
   type="session"
 )
 ```
-Also call `remember()` separately for any significant decisions or learnings with type="decision" or type="learning".
+For significant decisions or learnings, store those separately with type="decision" or type="learning".
+
+**Never skip the end-of-session remember(). It is how the next chat will know what happened here.**
 
 ---
 
