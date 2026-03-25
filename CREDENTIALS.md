@@ -54,20 +54,20 @@ echo "=== VOYAGE AI (memory embeddings) ===" && \
 | Env var | Status | MCP server / tool it unlocks |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | ✅ Present | Claude API, memory embeddings fallback |
-| `GITHUB_TOKEN` | ✅ Present (Codespace-scoped) | GitHub MCP — push only to `venture-os`; needs PAT for cross-repo |
+| `GITHUB_TOKEN` | ✅ Present (Codespace-scoped) | GitHub MCP — push only to `venture-os`; **replace with PAT to unlock all repos** (see below) |
 | `BRAVE_API_KEY` | ✅ Present | Brave Search MCP |
 | `SUPABASE_URL` | ✅ Present | Cross-workspace memory MCP |
 | `SUPABASE_SERVICE_ROLE_KEY` | ✅ Present | Cross-workspace memory MCP |
-| `GCAL_CREDENTIALS` | ✅ Present (raw JSON) | Not consumed directly — extract values below |
-| `GMAIL_CREDENTIALS` | ✅ Present (raw JSON) | Not consumed directly — extract values below |
-| `GDRIVE_CREDENTIALS` | ✅ Present (raw JSON) | Not consumed directly — extract values below |
-| `GOOGLE_CLIENT_ID` | ❌ Missing | Google Workspace MCP (Gmail, Calendar, Drive, Sheets, Docs, Slides, Forms, Tasks, Chat) |
-| `GOOGLE_CLIENT_SECRET` | ❌ Missing | Google Workspace MCP |
-| `N8N_API_KEY` | ❌ Missing | n8n MCP — build and trigger automations |
-| `N8N_BASE_URL` | ❌ Missing | n8n MCP |
-| `CLOUDFLARE_API_TOKEN` | ❌ Missing | Cloudflare MCP — R2, Workers, KV, Pages |
-| `CLOUDFLARE_ACCOUNT_ID` | ❌ Missing | Cloudflare MCP |
-| `VOYAGE_API_KEY` | ❌ Missing | Memory MCP embeddings (falls back to ANTHROPIC_API_KEY if missing) |
+| `VOYAGE_API_KEY` | ✅ Present | Memory MCP — high-quality embeddings |
+| `GCAL_CREDENTIALS` | ✅ Present (raw JSON) | Not consumed directly by MCP |
+| `GMAIL_CREDENTIALS` | ✅ Present (raw JSON) | Not consumed directly by MCP |
+| `GDRIVE_CREDENTIALS` | ✅ Present (raw JSON) | Not consumed directly by MCP |
+| `GOOGLE_CLIENT_ID` | ⚠️ In dotfiles, not loaded yet | Google Workspace MCP — needs Codespace rebuild to load |
+| `GOOGLE_CLIENT_SECRET` | ⚠️ In dotfiles, not loaded yet | Google Workspace MCP — needs Codespace rebuild to load |
+| `N8N_API_KEY` | ⏸️ Deferred | n8n MCP — activate only when a client project requires it |
+| `N8N_BASE_URL` | ⏸️ Deferred | n8n MCP |
+| `CLOUDFLARE_API_TOKEN` | ⏸️ Deferred | Cloudflare MCP — needed at lool-ai pilot stage for client catalog images |
+| `CLOUDFLARE_ACCOUNT_ID` | ⏸️ Deferred | Cloudflare MCP |
 
 ---
 
@@ -79,16 +79,17 @@ All changes go into `salasoliva27/dotfiles/.env`. They auto-load into all future
 
 ### 1. GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET
 
-**The values already exist** inside your `GCAL_CREDENTIALS` JSON. You just need to extract them as standalone vars.
+**Both vars are already in dotfiles.** They just haven't loaded into the current Codespace session because the Codespace was created before they were added.
 
-From your current `GCAL_CREDENTIALS`:
-- `GOOGLE_CLIENT_ID` = `641852143444-ksc243pkn73mhab1ikm4k7fb56c6iimp.apps.googleusercontent.com`
-- `GOOGLE_CLIENT_SECRET` = value from `.web.client_secret` in that JSON
-
-Add to `salasoliva27/dotfiles/.env`:
+**To load them now without rebuilding** (run in terminal):
+```bash
+source /workspaces/.codespaces/.persistedshare/dotfiles/.env
 ```
-GOOGLE_CLIENT_ID=641852143444-ksc243pkn73mhab1ikm4k7fb56c6iimp.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=<your_client_secret_from_GCAL_CREDENTIALS>
+Or rebuild this Codespace (Codespaces → Rebuild) — they'll auto-load on next start.
+
+**To verify once loaded:**
+```bash
+echo $GOOGLE_CLIENT_ID && echo $GOOGLE_CLIENT_SECRET
 ```
 
 **Then, one-time OAuth flow** (run once per Codespace machine):
@@ -203,24 +204,30 @@ VOYAGE_API_KEY=<your_voyage_api_key>
 
 ---
 
-### 5. GITHUB_TOKEN — Cross-repo push access
+### 5. GITHUB_TOKEN — Permanent cross-repo PAT (do this once, never again)
 
-**Current issue:** The Codespace token auto-scoped to `venture-os` only. Pushing to `lool-ai` or `espacio_bosques` from this Codespace returns 403.
+**Current situation:** Every new Codespace injects a scoped `GITHUB_TOKEN` that only works for that repo. This causes 403 on cross-repo pushes and would require manual work every time a new project is created.
 
-**Fix:** Create a Personal Access Token (PAT) with repo scope.
+**Permanent fix:** One Classic PAT with no expiration in dotfiles. It overrides the scoped Codespace token everywhere — current and future Codespaces get it automatically from dotfiles on creation. Zero per-project setup.
 
-1. GitHub → Settings → Developer Settings → Personal Access Tokens → Tokens (classic)
+**Steps (one time only):**
+1. github.com → Settings → Developer Settings → Personal access tokens → **Tokens (classic)**
 2. "Generate new token (classic)"
-3. Scopes: check `repo` (full control of private repos)
-4. Set expiration to 1 year
-5. Copy the token
+3. **Expiration: No expiration**
+4. **Scopes: check `repo`** (full control of all private repos under your account)
+5. Generate → copy immediately (shown only once)
 
 Add to `salasoliva27/dotfiles/.env`:
 ```
 GITHUB_TOKEN=ghp_your_new_pat_here
 ```
 
-This replaces the Codespace-injected token and gives push access to all your repos.
+**Why Classic PAT, not Fine-grained?**
+Fine-grained PATs support "All repositories" but max out at 1 year expiration — you'd rotate it annually. Classic PATs can be set to no expiration. For a solo portfolio, that tradeoff is worth it.
+
+**After this:**
+- New Codespaces: PAT loads automatically, push works to any repo from day one
+- New projects Claude creates: no manual token step needed ever
 
 ---
 

@@ -17,8 +17,8 @@ All tools are configured once here. Projects declare which tools they need in th
 | Fetch | fetch | ✅ Installed | HTTP requests, web scraping | All |
 | Sequential Thinking | sequential-thinking | ✅ Installed | Multi-step reasoning chains | All |
 | Memory (basic) | memory | ✅ Installed | In-session key-value memory | All |
-| n8n | n8n | ✅ Installed (needs N8N_API_KEY, N8N_BASE_URL) | Build and deploy automation workflows | freelance-system |
-| Cloudflare | cloudflare | ✅ Installed (needs CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID) | R2 media storage, Workers, KV | lool-ai, campaigns |
+| n8n | n8n | ⏸️ Deferred — activate only when a client project specifically requires n8n | Build and deploy automation workflows | freelance-system (conditional) |
+| Cloudflare | cloudflare | ⏸️ Deferred — needed at lool-ai pilot stage when clients upload real product catalogs | R2 media storage, Workers, KV | lool-ai (when ready for pilot) |
 | Notion | notion | ✅ Active (via Claude.ai integration) | Documentation, structured notes | Optional |
 | Supabase Memory | supabase-memory | ⬜ Planned — cross-workspace semantic memory | Conversation history, learning database, RAG across all projects | All |
 | Playwright CLI | CLI — `@playwright/cli` | ✅ Installed globally (`npm i -g @playwright/cli`) | Token-efficient browser automation for agents; better than MCP Playwright for coding agents | freelance-system, lool-ai |
