@@ -1,0 +1,4 @@
+[     882ms] [WARNING] GSAP target .hero-logo not found. https://gsap.com @ https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js:9
+[     954ms] [ERROR] Failed to load resource: the server responded with a status of 404 (File not found) @ http://localhost:8080/favicon.ico:0
+[    1735ms] TypeError: Cannot read properties of null (reading 'classList')
+    at http://localhost:8080/script.js:549:16
