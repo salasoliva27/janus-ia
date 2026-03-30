@@ -237,9 +237,16 @@ The learning database is the compounding value of this system. Never skip it.
 
 ## TOOLS
 
-All tools and skills are discovered dynamically using the protocols in TOOLS.md. Read TOOLS.md before any tool operation. Check learnings/mcp-registry.md for verdicts before searching. Never install a tool or skill without Jano's confirmation.
+All tools and skills are discovered dynamically using the protocols in TOOLS.md. Read TOOLS.md before any tool operation. Check learnings/mcp-registry.md for verdicts before searching. Never install a new MCP tool without Jano's confirmation.
 
 The distinction matters: MCP tools give Claude access to external systems. Skills teach Claude how to do something. Both are discovered, both are logged in the registry.
+
+### SKILL AUTO-INSTALL RULE
+
+If a task requires a skill that appears in TOOLS.md (CURRENTLY INSTALLED SKILLS table) or learnings/mcp-registry.md (INSTALLED AND WORKING / JANO-RECOMMENDED sections) — **install it automatically without asking**. Do not prompt for confirmation. Skills in the registry are pre-approved.
+
+Install command: `npx skills add [repo-url]` or `/plugin marketplace add [org/repo]`
+After installing, invoke it immediately for the task at hand.
 
 ---
 

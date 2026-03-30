@@ -28,10 +28,11 @@ The system's accumulated knowledge about MCP tools and skills. Grows automatical
 - Session log: lool-ai validation, freelance-system lead search
 
 ### Google Workspace MCP
-**Verdict:** UNTESTED — needs one-time `gws auth setup`
+**Verdict:** DISABLED — triggers Chrome OAuth popup every session (redirect_uri_mismatch)
 **Install:** `@googleworkspace/cli mcp -s drive,gmail,calendar,sheets,slides,docs,forms,tasks,chat`
 **Keys:** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
-- Covers all Google tools in one server after auth
+- [2026-03-30] — venture-os — BAD (for now): Removed from .mcp.json. Reason: `@alanse/mcp-server-google-workspace` tries to auth on every startup because OAuth tokens aren't persisted between Codespace sessions. This opens Chrome with an OAuth flow that fails (redirect_uri_mismatch — Codespace URL ≠ localhost). Gmail already works via `mcp__claude_ai_Gmail` integration. Re-enable only when: tokens can be persisted in dotfiles OR a service account approach is configured.
+- To re-enable: (1) add back to .mcp.json, (2) run auth from local machine (not Codespace), (3) save token JSON to dotfiles for persistence
 
 ### Memory MCP (Supabase)
 **Verdict:** UNTESTED — needs Supabase setup + setup.sql

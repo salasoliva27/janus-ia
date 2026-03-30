@@ -14,15 +14,6 @@
         "BRAVE_API_KEY": "${BRAVE_API_KEY}"
       }
     },
-    "google-workspace": {
-      "command": "npx",
-      "args": ["-y", "@alanse/mcp-server-google-workspace", "-s", "user"],
-      "env": {
-        "CLIENT_ID": "${GOOGLE_CLIENT_ID}",
-        "CLIENT_SECRET": "${GOOGLE_CLIENT_SECRET}",
-        "GWORKSPACE_CREDS_DIR": "/home/codespace/.config/google-workspace"
-      }
-    },
     "filesystem": {
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-filesystem", "/workspaces"],
