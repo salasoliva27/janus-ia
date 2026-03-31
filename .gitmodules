@@ -1,0 +1,12 @@
+[submodule "projects/lool-ai"]
+	path = projects/lool-ai
+	url = https://github.com/salasoliva27/lool-ai.git
+[submodule "projects/espacio-bosques"]
+	path = projects/espacio-bosques
+	url = https://github.com/salasoliva27/espacio_bosques.git
+[submodule "projects/longevite-therapeutics"]
+	path = projects/longevite-therapeutics
+	url = https://github.com/salasoliva27/LongeviteTherapeutics.git
+[submodule "projects/freelance-system"]
+	path = projects/freelance-system
+	url = https://github.com/salasoliva27/freelance-system.git
