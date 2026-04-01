@@ -192,7 +192,16 @@ The system's accumulated knowledge about MCP tools and skills. Grows automatical
 
 ## JANO-RECOMMENDED (MCP TOOLS)
 *Tools Jano has personally sourced and wants in the system. Added on instruction, not discovery.*
-*(Empty — will populate as Jano adds recommendations)*
+
+### Remotion (video generation framework)
+**Verdict:** UNTESTED — HIGH PRIORITY
+**Type:** Build tool (npm package, not an MCP server)
+**Install:** `npm create video@latest` (new project) or `npm install remotion @remotion/bundler @remotion/renderer` (existing)
+**Cloud rendering:** `npm install @remotion/lambda` + AWS credentials (placeholders added to dotfiles 2026-04-01)
+**Keys:** `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` — placeholders in dotfiles, need real AWS IAM keys
+**Why:** React → MP4 at $0.01/render-minute. Proven: Submagic ($1M ARR in 3 months), Crayo ($6M ARR), 10+ companies hitting $1M+ on Remotion. Claude can generate Remotion code from natural language.
+**Use cases in portfolio:** longevite therapy reels, espacio-bosques project update videos, lool-ai store demo videos, freelance-system new service type
+**[2026-04-01] — venture-os — REGISTERED:** Added to TOOLS.md + AWS placeholders to dotfiles. Not yet used in any project build.
 
 ---
 

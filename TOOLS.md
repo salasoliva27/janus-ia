@@ -1,4 +1,4 @@
-# TOOLS REGISTRY
+make sure that tool is added to # TOOLS REGISTRY
 ## Venture OS — Dynamic Discovery
 ## Last updated: 2026-03-25
 
@@ -107,6 +107,57 @@ Same format as MCP feedback, under Skills section in `learnings/mcp-registry.md`
 
 ---
 
+## VIDEO GENERATION — REMOTION
+
+**What it is:** React-based programmatic video generation. Write TypeScript/React components → render to MP4. No timeline editor. Video = code = infinitely scalable.
+
+**Install (per project):**
+```bash
+npm create video@latest
+# or add to existing React project:
+npm install remotion @remotion/bundler @remotion/renderer
+```
+
+**Cloud rendering (Lambda):**
+```bash
+npm install @remotion/lambda
+npx remotion lambda policies print   # shows exact IAM policy needed
+npx remotion lambda sites create      # deploys your comp to S3
+npx remotion lambda render            # renders via Lambda ($0.01/min)
+```
+
+**Keys needed:**
+
+| Env var | Where to get | Status |
+|---|---|---|
+| `AWS_ACCESS_KEY_ID` | AWS IAM → Users → Access keys | ⬜ Placeholder in dotfiles |
+| `AWS_SECRET_ACCESS_KEY` | Same IAM user | ⬜ Placeholder in dotfiles |
+| `AWS_REGION` | Set to `us-east-1` | ✅ In dotfiles |
+
+**AWS setup (one-time):**
+1. Go to console.aws.amazon.com/iam → Users → Add user
+2. Run `npx remotion lambda policies print` → copy the exact policy JSON
+3. Attach that policy to your IAM user
+4. Generate access key → paste into dotfiles
+
+**Local dev (no keys needed):**
+```bash
+npm create video@latest my-video
+cd my-video && npm start  # preview at localhost:3000
+npx remotion render        # renders to out/ locally
+```
+
+**Where it fits in the portfolio:**
+- `longevite-therapeutics` — therapy explainer reels, clinic promos, Instagram content
+- `espacio-bosques` — personalized project update videos for community investors
+- `lool-ai` — product demo videos for optical store pitches
+- `freelance-system` — "AI Video Generation" as a new service type (~$500–2,000/project)
+- New standalone project — vertical video SaaS (see PROJECTS.md when ready)
+
+**Cost:** Free (local) · $0.01/render-minute (Lambda) · A 60-second video ≈ $0.01–0.03
+
+---
+
 ## CURRENTLY CONFIGURED MCP TOOLS
 
 | Tool | Env var | What it does | Registry status |
@@ -128,6 +179,7 @@ Same format as MCP feedback, under Skills section in `learnings/mcp-registry.md`
 
 | Skill | Location | Invoked when |
 |---|---|---|
+| remotion | npm (per project) | Any video generation task — promos, reels, personalized videos, data viz videos |
 | docx | /mnt/skills/public/docx/ | Creating Word documents |
 | pdf | /mnt/skills/public/pdf/ | Working with PDF files |
 | pptx | /mnt/skills/public/pptx/ | Creating presentations |
