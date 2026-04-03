@@ -103,7 +103,7 @@ All projects use the same Supabase project (`rycybujjedtofghigyxm`). Tables are 
 
 ## SESSION BEHAVIOR — READ THIS FIRST
 
-**This workspace is: `janus`**
+**This workspace is: `janus-ia`**
 
 Every time a chat opens — regardless of what the user says first — you MUST do the following before composing any response:
 
