@@ -1,7 +1,7 @@
 # PROJECTS REGISTRY
 ## Last updated: 2026-04-02
 
-This is the heartbeat of Venture OS. Every project is registered here. The master agent reads this at the start of every session.
+This is the heartbeat of Janus IA. Every project is registered here. The master agent reads this at the start of every session.
 
 ---
 
@@ -55,7 +55,7 @@ This is the heartbeat of Venture OS. Every project is registered here. The maste
 - **Target market:** Bosques de las Lomas residents + local service providers
 - **Immediate next steps:** Alchemy account → testnet ETH → MetaMask private key in .env → npm run deploy:sepolia → React frontend (4 screens)
 - **Key legal flag:** Blockchain-based investment → potential CNBV regulatory territory → validate before real funds
-- **Status:** ⬜ Not yet registered under venture-os. Smart contract phase complete.
+- **Status:** ⬜ Not yet registered under janus. Smart contract phase complete.
 
 ---
 

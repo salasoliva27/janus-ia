@@ -1,5 +1,5 @@
 """
-Venture OS — NotebookLM Full Automation
+Janus IA — NotebookLM Full Automation
 Runs after: notebooklm login
 
 Creates notebooks for all projects, adds all sources, generates every artifact type.
@@ -19,8 +19,8 @@ OUTPUTS_DIR.mkdir(exist_ok=True)
 
 NOTEBOOKS = [
     {
-        "name": "Venture OS — Master Portfolio",
-        "sources": ["venture-os-master.md"],
+        "name": "Janus IA — Master Portfolio",
+        "sources": ["janus-master.md"],
         "artifacts": ["report", "mind-map", "audio", "slide-deck", "flashcards", "quiz", "infographic", "data-table"],
         "questions": [
             "What are the top 3 strategic priorities across the portfolio right now?",
@@ -173,7 +173,7 @@ def main():
         print(f"  → Saved to {qa_path}")
 
         # ── 6. Save Q&A as note ──────────────────────────────────────────────
-        run(f'notebooklm history save --title "Venture OS Q&A — {nb_name}"')
+        run(f'notebooklm history save --title "Janus IA Q&A — {nb_name}"')
 
         # ── 7. Generate artifacts ────────────────────────────────────────────
         print(f"\n  Generating artifacts: {', '.join(nb_config['artifacts'])}")

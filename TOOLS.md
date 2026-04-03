@@ -1,5 +1,5 @@
 make sure that tool is added to # TOOLS REGISTRY
-## Venture OS — Dynamic Discovery
+## Janus IA — Dynamic Discovery
 ## Last updated: 2026-03-25
 
 ---
@@ -201,7 +201,7 @@ npx remotion render        # renders to out/ locally
 Code, markdown, CSV, configs → GitHub (project repo)
 Research docs, proposals → GitHub (/validation or /gtm)
 Client deliverables, PDFs → Google Drive /VentureOS/[project]/
-Campaign media, AI images/video → Cloudflare R2 /venture-os-media/[project]/
+Campaign media, AI images/video → Cloudflare R2 /janus-media/[project]/
 Large video files → Google Drive /VentureOS/[project]/media/
 ```
 

@@ -1,11 +1,11 @@
-# VENTURE OS — MASTER PORTFOLIO BRIEF
+# JANUS IA — MASTER PORTFOLIO BRIEF
 ## Alejandro "Jano" Salas Oliva | Mexico City | April 2026
 
 ---
 
-## WHAT IS VENTURE OS
+## WHAT IS JANUS IA
 
-Venture OS is a personal operating system for managing a portfolio of simultaneous ventures at different stages of development. Built on top of Claude Code (AI agent runtime), it coordinates four active projects from a single repository with shared memory, learnings, and financial tracking.
+Janus IA is a personal operating system for managing a portfolio of simultaneous ventures at different stages of development. Built on top of Claude Code (AI agent runtime), it coordinates four active projects from a single repository with shared memory, learnings, and financial tracking.
 
 The system is:
 - **Active**: challenges assumptions, detects conflicts, proposes next steps

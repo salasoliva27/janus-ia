@@ -1,0 +1,462 @@
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - generic [ref=e3]:
+      - generic [ref=e5]: LONGEVITÉ
+      - navigation [ref=e6]:
+        - link "Inicio" [ref=e7] [cursor=pointer]:
+          - /url: "#hero"
+        - link "Nosotros" [ref=e8] [cursor=pointer]:
+          - /url: "#about"
+        - link "Terapias" [ref=e9] [cursor=pointer]:
+          - /url: "#therapies"
+        - link "Contacto" [ref=e10] [cursor=pointer]:
+          - /url: "#contact"
+        - generic [ref=e11]:
+          - button "ES" [ref=e12] [cursor=pointer]
+          - generic [ref=e13]: "|"
+          - button "EN" [ref=e14] [cursor=pointer]
+  - generic [ref=e18]:
+    - heading "L O N G E V I T É T H E R A P E U T I C S" [level=1] [ref=e19]:
+      - generic [ref=e20]:
+        - generic: L
+        - generic: O
+        - generic: "N"
+        - generic: G
+        - generic: E
+        - generic: V
+        - generic: I
+        - generic: T
+        - generic: É
+      - generic [ref=e21]:
+        - generic: T
+        - generic: H
+        - generic: E
+        - generic: R
+        - generic: A
+        - generic: P
+        - generic: E
+        - generic: U
+        - generic: T
+        - generic: I
+        - generic: C
+        - generic: S
+    - paragraph [ref=e22]: Longevidad con ciencia y propósito
+    - paragraph [ref=e23]: Medicina funcional, nutrición y ciencia de la longevidad
+    - generic [ref=e24]:
+      - link "Conoce Nuestras Terapias" [ref=e25] [cursor=pointer]:
+        - /url: "#therapies"
+      - link "Agendar Cita" [ref=e26] [cursor=pointer]:
+        - /url: "#contact"
+  - generic [ref=e29]:
+    - heading "¿Quiénes Somos?" [level=2] [ref=e30]
+    - paragraph [ref=e31]: En Longevité Therapeutics integramos medicina funcional, nutrición avanzada y ciencia de la longevidad para ayudarte a vivir más años con mayor vitalidad. Nuestro enfoque personalizado identifica las causas raíz de los desequilibrios de salud y ofrece terapias basadas en evidencia que optimizan tu bienestar a nivel celular.
+    - img "Sillas de tratamiento Longevité Therapeutics" [ref=e33]
+    - generic [ref=e34]:
+      - generic [ref=e35]:
+        - heading "Ciencia de Vanguardia" [level=3] [ref=e36]
+        - paragraph [ref=e37]: Utilizamos investigación avanzada y terapias respaldadas científicamente, incorporando los últimos hallazgos en medicina funcional y longevidad para ofrecerte tratamientos de clase mundial.
+      - generic [ref=e38]:
+        - heading "Protocolos de Excelencia" [level=3] [ref=e39]
+        - paragraph [ref=e40]: Mantenemos una estandarización rigurosa y control de calidad en cada terapia. Nuestros protocolos siguen los más altos estándares internacionales de seguridad y eficacia.
+      - generic [ref=e41]:
+        - heading "Acompañamiento Personalizado" [level=3] [ref=e42]
+        - paragraph [ref=e43]: Diseñamos planes integrales adaptados a tus necesidades individuales, enfocados en longevidad, energía y bienestar sostenible. Te acompañamos en cada paso de tu transformación.
+      - generic [ref=e44]:
+        - heading "Comunidad Innovadora" [level=3] [ref=e45]
+        - paragraph [ref=e46]: Formamos parte de una red global de medicina funcional en constante evolución. Compartimos conocimiento y mejores prácticas para guiarte hacia una vida más larga y plena.
+    - generic [ref=e48]:
+      - heading "Respaldados por los protocolos del Dr. Terry Grossman" [level=3] [ref=e49]
+      - paragraph [ref=e50]: Autoridad global en longevidad y medicina funcional desde 1970, coautor con Ray Kurzweil de obras fundamentales sobre extensión de la vida. Integramos sus protocolos con inteligencia artificial y los más altos estándares internacionales de seguridad para garantizar resultados óptimos.
+  - generic [ref=e52]:
+    - heading "Nuestra Filosofía" [level=2] [ref=e53]
+    - generic [ref=e54]:
+      - generic [ref=e55]:
+        - heading "Medicina Funcional" [level=3] [ref=e56]:
+          - generic [ref=e57]: Medicina Funcional
+        - list [ref=e58]:
+          - listitem [ref=e59]: → Identifica y trata las causas raíz, no solo los síntomas superficiales
+          - listitem [ref=e60]: → Reconoce la interconexión entre nutrición, hormonas, salud intestinal, sueño, estrés y estilo de vida
+          - listitem [ref=e61]: → Los tratamientos incluyen planes de nutrición personalizados, suplementación estratégica, terapias intravenosas y ajustes de estilo de vida
+      - generic [ref=e62]:
+        - heading "Medicina de Longevidad" [level=3] [ref=e63]:
+          - generic [ref=e64]: Medicina de Longevidad
+        - list [ref=e65]:
+          - listitem [ref=e66]: → Enfoque basado en evidencia científica para extender el período de vida saludable (healthspan)
+          - listitem [ref=e67]: → Protocolos personalizados diseñados para optimizar vitalidad y prevenir enfermedades antes de que aparezcan
+          - listitem [ref=e68]: → Integración de inteligencia artificial para monitoreo avanzado y ajuste continuo de tratamientos
+  - generic [ref=e70]:
+    - generic [ref=e71]:
+      - heading "Condiciones que Tratamos" [level=2] [ref=e72]:
+        - generic [ref=e73]:
+          - text: Condiciones
+          - text: que Tratamos
+      - paragraph [ref=e74]:
+        - generic [ref=e75]:
+          - text: Cada cuerpo tiene su propio ritmo.
+          - text: Nuestros protocolos se adaptan a tu biología, no al revés.
+    - generic [ref=e76]:
+      - generic [ref=e77] [cursor=pointer]:
+        - generic [ref=e78]:
+          - generic [ref=e79]: "01"
+          - generic [ref=e80]: Fatiga crónica
+          - generic [ref=e81]: +
+        - paragraph [ref=e82]: Estado de agotamiento persistente que no mejora con descanso. Abordamos las causas subyacentes como deficiencias nutricionales, disfunción mitocondrial y desequilibrios hormonales para restaurar tus niveles de energía.
+      - generic [ref=e83] [cursor=pointer]:
+        - generic [ref=e84]:
+          - generic [ref=e85]: "02"
+          - generic [ref=e86]: Salud intestinal
+          - generic [ref=e87]: +
+        - paragraph [ref=e88]: El intestino es fundamental para la inmunidad y el bienestar general. Tratamos disbiosis, permeabilidad intestinal y problemas digestivos con protocolos personalizados que restauran el equilibrio del microbioma.
+      - generic [ref=e89] [cursor=pointer]:
+        - generic [ref=e90]:
+          - generic [ref=e91]: "03"
+          - generic [ref=e92]: Neuroprotección
+          - generic [ref=e93]: +
+        - paragraph [ref=e94]: Protegemos la función cerebral y prevenimos el deterioro cognitivo mediante terapias que optimizan la salud neuronal, reducen la neuroinflamación y apoyan la plasticidad cerebral para mantener tu mente aguda.
+      - generic [ref=e95] [cursor=pointer]:
+        - generic [ref=e96]:
+          - generic [ref=e97]: "04"
+          - generic [ref=e98]: Higiene del sueño
+          - generic [ref=e99]: +
+        - paragraph [ref=e100]: El sueño reparador es esencial para la longevidad. Identificamos alteraciones del ritmo circadiano, deficiencias de neurotransmisores y factores ambientales que afectan tu descanso para mejorar la calidad del sueño.
+      - generic [ref=e101] [cursor=pointer]:
+        - generic [ref=e102]:
+          - generic [ref=e103]: "05"
+          - generic [ref=e104]: Deshidratación
+          - generic [ref=e105]: +
+        - paragraph [ref=e106]: La hidratación celular óptima es vital para todas las funciones corporales. Corregimos desequilibrios de electrolitos y volumen con terapia intravenosa que restaura la hidratación a nivel celular rápidamente.
+      - generic [ref=e107] [cursor=pointer]:
+        - generic [ref=e108]:
+          - generic [ref=e109]: "06"
+          - generic [ref=e110]: Salud preventiva
+          - generic [ref=e111]: +
+        - paragraph [ref=e112]: Anticiparse a las enfermedades es más efectivo que tratarlas. Realizamos análisis avanzados para detectar desequilibrios tempranos y diseñamos intervenciones preventivas personalizadas basadas en tu perfil único.
+      - generic [ref=e113] [cursor=pointer]:
+        - generic [ref=e114]:
+          - generic [ref=e115]: "07"
+          - generic [ref=e116]: Salud cardiovascular
+          - generic [ref=e117]: +
+        - paragraph [ref=e118]: Optimizamos la salud del corazón y los vasos sanguíneos mediante control de inflamación vascular, gestión de lípidos y mejora de la función endotelial para prevenir enfermedades cardiovasculares.
+      - generic [ref=e119] [cursor=pointer]:
+        - generic [ref=e120]:
+          - generic [ref=e121]: "08"
+          - generic [ref=e122]: Resistencia a la insulina
+          - generic [ref=e123]: +
+        - paragraph [ref=e124]: Precursor de diabetes tipo 2 y síndrome metabólico. Revertimos la resistencia a la insulina con intervenciones nutricionales, suplementación dirigida y optimización del metabolismo de la glucosa.
+      - generic [ref=e125] [cursor=pointer]:
+        - generic [ref=e126]:
+          - generic [ref=e127]: "09"
+          - generic [ref=e128]: Metabolismo y Energía
+          - generic [ref=e129]: +
+        - paragraph [ref=e130]: Optimizamos la función mitocondrial, la producción de ATP y el metabolismo celular para maximizar tus niveles de energía, mejorar la composición corporal y acelerar la recuperación física.
+      - generic [ref=e131] [cursor=pointer]:
+        - generic [ref=e132]:
+          - generic [ref=e133]: "10"
+          - generic [ref=e134]: Salud Cerebral y Cognitiva
+          - generic [ref=e135]: +
+        - paragraph [ref=e136]: Mejoramos memoria, concentración y claridad mental mediante apoyo neurológico integral. Abordamos inflamación cerebral, optimización de neurotransmisores y nutrición cerebral para rendimiento cognitivo óptimo.
+      - generic [ref=e137] [cursor=pointer]:
+        - generic [ref=e138]:
+          - generic [ref=e139]: "11"
+          - generic [ref=e140]: Inmunidad e Inflamación
+          - generic [ref=e141]: +
+        - paragraph [ref=e142]: Fortalecemos las defensas naturales y modulamos la inflamación crónica que subyace a muchas enfermedades. Equilibramos la respuesta inmune para protección óptima sin sobreactivación.
+      - generic [ref=e143] [cursor=pointer]:
+        - generic [ref=e144]:
+          - generic [ref=e145]: "12"
+          - generic [ref=e146]: Salud Ósea y Muscular
+          - generic [ref=e147]: +
+        - paragraph [ref=e148]: Preservamos densidad ósea, función muscular y salud articular mediante nutrición específica, optimización hormonal y suplementación dirigida para mantener movilidad y fuerza con el tiempo.
+      - generic [ref=e149] [cursor=pointer]:
+        - generic [ref=e150]:
+          - generic [ref=e151]: "13"
+          - generic [ref=e152]: Deficiencia de vitamina D
+          - generic [ref=e153]: +
+        - paragraph [ref=e154]: Condición extremadamente común que afecta inmunidad, estado de ánimo y salud ósea. Corregimos niveles mediante suplementación adecuada y monitoreo para alcanzar rangos óptimos, no solo normales.
+      - generic [ref=e155] [cursor=pointer]:
+        - generic [ref=e156]:
+          - generic [ref=e157]: "14"
+          - generic [ref=e158]: Ferropenia sin anemia
+          - generic [ref=e159]: +
+        - paragraph [ref=e160]: Deficiencia de hierro que causa fatiga y bajo rendimiento incluso antes de desarrollar anemia. Restauramos reservas de hierro con terapia intravenosa para recuperación rápida y efectiva.
+      - generic [ref=e161] [cursor=pointer]:
+        - generic [ref=e162]:
+          - generic [ref=e163]: "15"
+          - generic [ref=e164]: Estilo de Vida y Hábitos
+          - generic [ref=e165]: +
+        - paragraph [ref=e166]: Los hábitos diarios determinan tu salud a largo plazo. Te guiamos en optimización de nutrición, ejercicio, manejo del estrés y rutinas que promueven longevidad basándonos en evidencia científica.
+      - generic [ref=e167] [cursor=pointer]:
+        - generic [ref=e168]:
+          - generic [ref=e169]: "16"
+          - generic [ref=e170]: Prevención Avanzada
+          - generic [ref=e171]: +
+        - paragraph [ref=e172]: Utilizamos biomarcadores avanzados, análisis genético y evaluaciones funcionales para identificar riesgos años antes de que aparezcan síntomas, permitiendo intervención temprana y prevención efectiva.
+      - generic [ref=e173] [cursor=pointer]:
+        - generic [ref=e174]:
+          - generic [ref=e175]: "17"
+          - generic [ref=e176]: Recuperación deportiva
+          - generic [ref=e177]: +
+        - paragraph [ref=e178]: Aceleramos recuperación muscular, reducimos inflamación y optimizamos rendimiento atlético mediante terapias intravenosas, nutrición deportiva avanzada y protocolos de recuperación personalizados.
+      - generic [ref=e179] [cursor=pointer]:
+        - generic [ref=e180]:
+          - generic [ref=e181]: "18"
+          - generic [ref=e182]: Recuperación post-cirugía
+          - generic [ref=e183]: +
+        - paragraph [ref=e184]: Aceleramos cicatrización, fortalecemos el sistema inmune y restauramos la función normal tras procedimientos quirúrgicos con nutrición intravenosa, antioxidantes y protocolos de regeneración tisular.
+  - generic [ref=e185]:
+    - heading "Conoce Nuestras Terapias Intravenosas" [level=2] [ref=e187]
+    - generic [ref=e188]:
+      - generic [ref=e189] [cursor=pointer]:
+        - generic [ref=e190]:
+          - img "Longevité" [ref=e191]
+          - paragraph [ref=e193]: Nuestro protocolo insignia. Combinación avanzada de coenzimas, antioxidantes y nutrientes esenciales para regeneración celular profunda, optimización mitocondrial y longevidad sostenida.
+        - generic [ref=e195]: Longevité
+      - generic [ref=e196] [cursor=pointer]:
+        - generic [ref=e197]:
+          - img "Myers' Cocktail" [ref=e198]
+          - paragraph [ref=e200]: Mezcla clásica de magnesio, calcio, complejo B y vitamina C en infusión directa. Potencia la energía celular, refuerza el sistema inmune y combate la fatiga. El punto de partida ideal.
+        - generic [ref=e202]: Myers' Cocktail
+      - generic [ref=e203] [cursor=pointer]:
+        - generic [ref=e204]:
+          - img "Energy" [ref=e205]
+          - paragraph [ref=e207]: Infusión diseñada para combatir el agotamiento físico y mental. Activa la producción de ATP, optimiza la función mitocondrial y restaura los niveles de energía desde adentro hacia afuera.
+        - generic [ref=e209]: Energy
+      - generic [ref=e210] [cursor=pointer]:
+        - generic [ref=e211]:
+          - img "Recharge" [ref=e212]
+          - paragraph [ref=e214]: Recarga profunda tras esfuerzo físico intenso, viajes o períodos de alto estrés. Restaura electrolitos, hidratación celular y reservas de micronutrientes para recuperación rápida y efectiva.
+        - generic [ref=e216]: Recharge
+      - generic [ref=e217] [cursor=pointer]:
+        - generic [ref=e218]:
+          - img "Immune" [ref=e219]
+          - paragraph [ref=e221]: Refuerzo inmunológico de acción rápida. Vitamina C, zinc y selenio en dosis terapéuticas para activar las defensas naturales y reducir la duración e intensidad de infecciones.
+        - generic [ref=e223]: Immune
+      - generic [ref=e224] [cursor=pointer]:
+        - generic [ref=e225]:
+          - img "Immune+" [ref=e226]
+          - paragraph [ref=e228]: Versión reforzada del protocolo Immune. Incluye glutatión y cofactores adicionales para modulación inmunológica avanzada. Ideal en temporadas de alta exposición o estados de inmunodepresión.
+        - generic [ref=e230]: Immune+
+      - generic [ref=e231] [cursor=pointer]:
+        - generic [ref=e232]:
+          - img "Radiance" [ref=e233]
+          - paragraph [ref=e235]: Terapia de luminosidad y salud cutánea. Glutatión, vitamina C y biotina en concentraciones que estimulan la síntesis de colágeno, unifican el tono de la piel y le devuelven brillo natural.
+        - generic [ref=e237]: Radiance
+      - generic [ref=e238] [cursor=pointer]:
+        - generic [ref=e239]:
+          - img "Re-Glow" [ref=e240]
+          - paragraph [ref=e242]: Rejuvenecimiento cutáneo profundo. Combinación de antioxidantes, ácido hialurónico IV y nutrientes regenerativos que revierten el daño oxidativo y restauran la firmeza y luminosidad de la piel.
+        - generic [ref=e244]: Re-Glow
+      - generic [ref=e245] [cursor=pointer]:
+        - generic [ref=e246]:
+          - img "Long Hair" [ref=e247]
+          - paragraph [ref=e249]: Protocolo especializado para salud capilar desde adentro. Biotina, aminoácidos esenciales, zinc y silicio para fortalecer el folículo piloso, reducir la caída y estimular el crecimiento del cabello.
+        - generic [ref=e251]: Long Hair
+      - generic [ref=e252] [cursor=pointer]:
+        - generic [ref=e253]:
+          - img "After Party" [ref=e254]
+          - paragraph [ref=e256]: Recuperación exprés tras una noche de celebración. Hidratación IV, vitaminas del complejo B, antiinflamatorios naturales y antioxidantes para eliminar la resaca y restaurar vitalidad en menos de una hora.
+        - generic [ref=e258]: After Party
+      - generic [ref=e259] [cursor=pointer]:
+        - generic [ref=e260]:
+          - img "Migraine" [ref=e261]
+          - paragraph [ref=e263]: Alivio rápido y efectivo de migraña. Magnesio IV, riboflavina y antiinflamatorios naturales que interrumpen el ciclo del dolor, reducen la intensidad del episodio y aceleran la recuperación.
+        - generic [ref=e265]: Migraine
+      - generic [ref=e266] [cursor=pointer]:
+        - generic [ref=e267]:
+          - img "Pain Relief" [ref=e268]
+          - paragraph [ref=e270]: Manejo del dolor crónico y agudo sin fármacos convencionales. Combinación de antiinflamatorios naturales, magnesio y cofactores neuroprotectores para reducir la inflamación y el dolor de forma duradera.
+        - generic [ref=e272]: Pain Relief
+      - generic [ref=e273] [cursor=pointer]:
+        - generic [ref=e274]:
+          - img "Iron" [ref=e275]
+          - paragraph [ref=e277]: Reposición de hierro intravenosa para deficiencia con o sin anemia. Restaura los depósitos de ferritina, elimina la fatiga profunda y mejora el rendimiento cognitivo y físico de forma rápida.
+        - generic [ref=e279]: Iron
+      - generic [ref=e280] [cursor=pointer]:
+        - generic [ref=e281]:
+          - img "Purify" [ref=e282]
+          - paragraph [ref=e284]: Purificación y limpieza profunda del organismo. Antioxidantes de amplio espectro, apoyo hepático y eliminación de toxinas acumuladas para restaurar el equilibrio interno y mejorar el bienestar general.
+        - generic [ref=e286]: Purify
+      - generic [ref=e287] [cursor=pointer]:
+        - generic [ref=e288]:
+          - img "G-Detox" [ref=e289]
+          - paragraph [ref=e291]: Desintoxicación potenciada con glutatión. Elimina toxinas liposolubles, metales pesados y subproductos del estrés oxidativo. Protege el hígado y restaura la capacidad antioxidante endógena.
+        - generic [ref=e293]: G-Detox
+      - generic [ref=e294] [cursor=pointer]:
+        - generic [ref=e295]:
+          - img "D-Dtox" [ref=e296]
+          - paragraph [ref=e298]: Desintoxicación reforzada con vitamina D3 en dosis terapéuticas. Regula la respuesta inmune, reduce la inflamación sistémica y apoya la salud ósea, hormonal y metabólica a nivel profundo.
+        - generic [ref=e300]: D-Dtox
+      - generic [ref=e301] [cursor=pointer]:
+        - generic [ref=e302]:
+          - img "Detox Hepático" [ref=e303]
+          - paragraph [ref=e305]: Protocolo especializado de depuración hepática. Silimarina, glutatión, fosfolípidos y cofactores enzimáticos que regeneran el tejido del hígado, mejoran su función y optimizan la eliminación de toxinas.
+        - generic [ref=e307]:
+          - text: Detox
+          - text: Hepático
+      - generic [ref=e308] [cursor=pointer]:
+        - generic [ref=e309]:
+          - img "Redox" [ref=e310]
+          - paragraph [ref=e312]: Equilibrio redox celular avanzado. Restaura el balance entre oxidantes y antioxidantes a nivel mitocondrial, protege el ADN del daño oxidativo y optimiza la señalización celular para longevidad.
+        - generic [ref=e314]: Redox
+  - generic [ref=e316]:
+    - heading "¿Sabías qué?" [level=2] [ref=e317]
+    - generic [ref=e318]:
+      - generic [ref=e319]:
+        - generic [ref=e320]: NAD+
+        - heading "Los niveles de NAD+ disminuyen con la edad" [level=3] [ref=e321]
+        - list [ref=e322]:
+          - listitem [ref=e323]: ✓ ~40% de disminución a los 50 años
+          - listitem [ref=e324]: ✓ ~98% de disminución a los 80 años
+          - listitem [ref=e325]: ✓ Relacionado con fatiga, menor rendimiento físico, envejecimiento acelerado y declive cognitivo
+          - listitem [ref=e326]: ✓ La suplementación intravenosa puede restaurar niveles juveniles y mejorar la función celular
+      - generic [ref=e327]:
+        - generic [ref=e328]: 0/10
+        - heading "Deficiencia de Vitamina D en México" [level=3] [ref=e329]
+        - list [ref=e330]:
+          - listitem [ref=e331]: ✓ 8 de cada 10 personas tienen deficiencia de vitamina D
+          - listitem [ref=e332]: ✓ Vinculada a depresión, fatiga crónica y declive cognitivo
+          - listitem [ref=e333]: ✓ Esencial para salud inmunológica, fortaleza ósea y sensibilidad a la insulina
+          - listitem [ref=e334]: ✓ La optimización de niveles mejora el estado de ánimo, energía y prevención de enfermedades
+  - generic [ref=e336]:
+    - heading "Beneficios Esperados" [level=2] [ref=e337]
+    - generic [ref=e338]:
+      - generic [ref=e339]:
+        - img [ref=e341]
+        - heading "Aumento de energía y vitalidad" [level=3] [ref=e343]
+      - generic [ref=e344]:
+        - img [ref=e346]
+        - heading "Función cognitiva y memoria mejoradas" [level=3] [ref=e349]
+      - generic [ref=e350]:
+        - img [ref=e352]
+        - heading "Sistema inmunológico más fuerte" [level=3] [ref=e354]
+      - generic [ref=e355]:
+        - img [ref=e357]
+        - heading "Recuperación más rápida post-cirugía o enfermedad" [level=3] [ref=e360]
+      - generic [ref=e361]:
+        - img [ref=e363]
+        - heading "Prevención de enfermedades a largo plazo" [level=3] [ref=e366]
+      - generic [ref=e367]:
+        - img [ref=e369]
+        - heading "Reparación celular mejorada" [level=3] [ref=e373]
+      - generic [ref=e374]:
+        - img [ref=e376]
+        - heading "Salud de la piel" [level=3] [ref=e378]
+      - generic [ref=e379]:
+        - img [ref=e381]
+        - heading "Claridad mental" [level=3] [ref=e384]
+  - generic [ref=e386]:
+    - heading "Preguntas Frecuentes" [level=2] [ref=e387]
+    - generic [ref=e388]:
+      - generic [ref=e389]:
+        - button "¿Con qué frecuencia se hacen las terapias IV? +" [ref=e390] [cursor=pointer]:
+          - generic [ref=e391]: ¿Con qué frecuencia se hacen las terapias IV?
+          - generic [ref=e392]: +
+        - paragraph [ref=e393]: La frecuencia depende de tu estado de salud actual y tus objetivos específicos. Generalmente, iniciamos con una fase intensiva semanal o quincenal para optimizar niveles, y posteriormente pasamos a un protocolo de mantenimiento mensual. Durante tu consulta inicial, diseñamos un plan personalizado basado en tus análisis de laboratorio y necesidades individuales.
+      - generic [ref=e394]:
+        - button "¿Existen efectos secundarios? +" [ref=e395] [cursor=pointer]:
+          - generic [ref=e396]: ¿Existen efectos secundarios?
+          - generic [ref=e397]: +
+        - paragraph [ref=e398]: Las terapias intravenosas son muy seguras cuando se administran por profesionales capacitados. Ocasionalmente puede haber ligera molestia en el sitio de punción o una sensación temporal de calor durante la infusión, síntomas que son completamente pasajeros. Seguimos protocolos estrictos de seguridad y realizamos evaluación médica completa antes de cualquier tratamiento para minimizar cualquier riesgo.
+      - generic [ref=e399]:
+        - button "¿Cuál es la diferencia entre vía oral e intravenosa? +" [ref=e400] [cursor=pointer]:
+          - generic [ref=e401]: ¿Cuál es la diferencia entre vía oral e intravenosa?
+          - generic [ref=e402]: +
+        - paragraph [ref=e403]: La diferencia es significativa. La vía intravenosa asegura absorción del 100% de los nutrientes directamente al torrente sanguíneo, resultando en efectos más rápidos y niveles terapéuticos mucho más altos. La vía oral depende de la digestión y puede tener una absorción de solo 10-30%, especialmente en personas con problemas intestinales. Para objetivos terapéuticos serios, la vía IV es incomparablemente más efectiva.
+      - generic [ref=e404]:
+        - button "¿Se necesitan estudios previos? +" [ref=e405] [cursor=pointer]:
+          - generic [ref=e406]: ¿Se necesitan estudios previos?
+          - generic [ref=e407]: +
+        - paragraph [ref=e408]: Sí, absolutamente. Realizamos una evaluación clínica completa y solicitamos estudios de laboratorio específicos antes de iniciar cualquier protocolo de terapia intravenosa. Esto nos permite personalizar completamente el tratamiento a tus necesidades únicas, identificar deficiencias específicas y garantizar la máxima seguridad y efectividad. No trabajamos con protocolos genéricos; cada plan es diseñado científicamente para ti.
+      - generic [ref=e409]:
+        - button "¿Cuándo notaré los beneficios? +" [ref=e410] [cursor=pointer]:
+          - generic [ref=e411]: ¿Cuándo notaré los beneficios?
+          - generic [ref=e412]: +
+        - paragraph [ref=e413]: El tiempo de respuesta varía según la terapia y tu estado inicial. Muchos pacientes experimentan mejoras notables de energía y claridad mental desde la primera sesión, especialmente con terapias como Myers' Cocktail, NAD+ o Rehydration. Beneficios más profundos como optimización inmunológica, reparación celular y mejoras metabólicas se perciben gradualmente a lo largo de varias sesiones. El monitoreo continuo nos permite ajustar el protocolo para resultados óptimos.
+      - generic [ref=e414]:
+        - button "¿Se puede combinar con tratamientos médicos actuales? +" [ref=e415] [cursor=pointer]:
+          - generic [ref=e416]: ¿Se puede combinar con tratamientos médicos actuales?
+          - generic [ref=e417]: +
+        - paragraph [ref=e418]: Sí, la terapia intravenosa es altamente complementaria con la medicina convencional. De hecho, puede potenciar muchos tratamientos tradicionales y acelerar la recuperación. Trabajamos en coordinación con tu equipo médico actual para asegurar un enfoque integrado y seguro. Es importante informarnos sobre todos tus medicamentos actuales durante la evaluación inicial para optimizar la sinergia terapéutica.
+      - generic [ref=e419]:
+        - button "¿Hay contraindicaciones? +" [ref=e420] [cursor=pointer]:
+          - generic [ref=e421]: ¿Hay contraindicaciones?
+          - generic [ref=e422]: +
+        - paragraph [ref=e423]: Las contraindicaciones dependen de cada terapia específica. Personas con insuficiencia renal, hepática o cardiaca severa pueden requerir protocolos especiales o ajustes de dosis. Ciertas terapias no se recomiendan durante el embarazo o lactancia. Por esto es esencial la valoración médica inicial completa, donde evaluamos tu historial clínico detallado, medicaciones actuales y resultados de laboratorio para determinar el protocolo más seguro y efectivo para ti.
+  - generic [ref=e425]:
+    - heading "Contáctanos" [level=2] [ref=e426]
+    - generic [ref=e427]:
+      - generic [ref=e429]:
+        - generic [ref=e430]:
+          - generic [ref=e431]: Nombre
+          - textbox "Nombre" [ref=e432]
+        - generic [ref=e433]:
+          - generic [ref=e434]: Correo Electrónico
+          - textbox "Correo Electrónico" [ref=e435]
+        - generic [ref=e436]:
+          - generic [ref=e437]: Teléfono
+          - textbox "Teléfono" [ref=e438]
+        - generic [ref=e439]:
+          - generic [ref=e440]: Mensaje
+          - textbox "Mensaje" [ref=e441]
+        - button "Enviar Mensaje" [ref=e442] [cursor=pointer]
+      - generic [ref=e444]:
+        - generic [ref=e445]:
+          - img [ref=e447]
+          - generic [ref=e450]:
+            - heading "Dirección" [level=3] [ref=e451]
+            - paragraph [ref=e452]:
+              - text: "Pedregal #47, Col. Lomas Virreyes"
+              - text: Ciudad de México
+        - generic [ref=e453]:
+          - img [ref=e455]
+          - generic [ref=e457]:
+            - heading "Teléfono" [level=3] [ref=e458]
+            - paragraph [ref=e459]:
+              - link "+52 55 8930 3489" [ref=e460] [cursor=pointer]:
+                - /url: tel:+525589303489
+        - generic [ref=e461]:
+          - img [ref=e463]
+          - generic [ref=e466]:
+            - heading "Sitio Web" [level=3] [ref=e467]
+            - paragraph [ref=e468]:
+              - link "www.longevitetherapeutics.com" [ref=e469] [cursor=pointer]:
+                - /url: https://www.longevitetherapeutics.com
+        - generic [ref=e470]:
+          - img [ref=e472]
+          - generic [ref=e475]:
+            - heading "Instagram" [level=3] [ref=e476]
+            - paragraph [ref=e477]:
+              - link "@longevitetherapeutics" [ref=e478] [cursor=pointer]:
+                - /url: https://instagram.com/longevitetherapeutics
+  - contentinfo [ref=e479]:
+    - generic [ref=e480]:
+      - generic [ref=e481]:
+        - generic [ref=e482]:
+          - heading "LONGEVITÉ THERAPEUTICS" [level=3] [ref=e483]
+          - paragraph [ref=e484]: Medicina, nutrición y ciencia que se notan.
+        - generic [ref=e485]:
+          - heading "Enlaces Rápidos" [level=4] [ref=e486]
+          - list [ref=e487]:
+            - listitem [ref=e488]:
+              - link "Inicio" [ref=e489] [cursor=pointer]:
+                - /url: "#hero"
+            - listitem [ref=e490]:
+              - link "Nosotros" [ref=e491] [cursor=pointer]:
+                - /url: "#about"
+            - listitem [ref=e492]:
+              - link "Terapias" [ref=e493] [cursor=pointer]:
+                - /url: "#therapies"
+            - listitem [ref=e494]:
+              - link "Contacto" [ref=e495] [cursor=pointer]:
+                - /url: "#contact"
+        - generic [ref=e496]:
+          - heading "Síguenos" [level=4] [ref=e497]
+          - generic [ref=e498]:
+            - link "Instagram" [ref=e499] [cursor=pointer]:
+              - /url: https://instagram.com/longevitetherapeutics
+            - link "Website" [ref=e500] [cursor=pointer]:
+              - /url: https://www.longevitetherapeutics.com
+              - text: Web
+      - paragraph [ref=e502]: © 2026 Longevité Therapeutics. Todos los derechos reservados.
+  - button "Hablar con nutrIA" [ref=e503] [cursor=pointer]:
+    - img [ref=e504]

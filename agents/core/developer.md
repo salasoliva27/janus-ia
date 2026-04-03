@@ -53,7 +53,7 @@ Priority order: validated → simple → scalable
 - Legal and security implications checked before real user data is collected
 - Estimate × 1.5 buffer for any new technology
 
-### Context 3 — Agent/OS builds (venture-os, freelance-system, new project repos)
+### Context 3 — Agent/OS builds (janus, freelance-system, new project repos)
 Priority order: clear instructions → reliable behavior → self-expanding
 - The "code" is CLAUDE.md — write it like an unambiguous instruction set
 - Every behavior must be explicitly defined

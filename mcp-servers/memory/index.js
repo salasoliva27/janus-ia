@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Venture OS — Cross-workspace Memory MCP Server
+ * Janus IA — Cross-workspace Memory MCP Server
  *
- * Stores and retrieves memories across all project workspaces (venture-os,
+ * Stores and retrieves memories across all project workspaces (janus,
  * lool-ai, freelance-system, etc.) using Supabase + pgvector.
  *
  * Two modes:
@@ -43,7 +43,7 @@ async function generateEmbedding(text) {
 }
 
 const server = new Server(
-  { name: 'venture-os-memory', version: '1.0.0' },
+  { name: 'janus-memory', version: '1.0.0' },
   { capabilities: { tools: {} } }
 )
 
@@ -56,7 +56,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         type: 'object',
         properties: {
           content: { type: 'string', description: 'The memory content to store' },
-          workspace: { type: 'string', description: 'Workspace name: venture-os | lool-ai | freelance-system | espacio-bosques' },
+          workspace: { type: 'string', description: 'Workspace name: janus | lool-ai | freelance-system | espacio-bosques' },
           project: { type: 'string', description: 'Project name if different from workspace (optional)' },
           type: {
             type: 'string',

@@ -1,0 +1,12 @@
+[    1525ms] TypeError: Cannot read properties of null (reading 'useState')
+    at e.useState (http://localhost:3333/widget.js:17:37022)
+    at TL (http://localhost:3333/widget.js:280:41994)
+    at DL (http://localhost:3333/widget.js:280:43724)
+    at jo (http://localhost:3333/widget.js:8:47565)
+    at wc (http://localhost:3333/widget.js:8:70092)
+    at Bc (http://localhost:3333/widget.js:8:80370)
+    at Uu (http://localhost:3333/widget.js:8:115832)
+    at Bu (http://localhost:3333/widget.js:8:114910)
+    at zu (http://localhost:3333/widget.js:8:114747)
+    at Du (http://localhost:3333/widget.js:8:111609)
+[    1707ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:3333/favicon.ico:0

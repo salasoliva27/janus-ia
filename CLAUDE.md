@@ -1,5 +1,5 @@
-# VENTURE OS — MASTER BRAIN
-## Version 1 | March 16, 2026
+# JANUS IA — MASTER BRAIN
+## Version 2 | April 2026
 
 ---
 
@@ -16,6 +16,62 @@ You are NOT a passive logger. You actively challenge, propose, evaluate, and coo
 
 ---
 
+## DISPATCH PROTOCOL — EVERY REQUEST GOES THROUGH THIS
+
+Before starting any work, identify what kind of task this is and route it:
+
+| Task type | Agent | Tools to check | Skills to check |
+|---|---|---|---|
+| New idea / product intake | agents/core/intake.md | Brave Search | deep-research |
+| Software build / code | agents/core/developer.md | GitHub, Context7, Playwright | feature-dev, frontend-design |
+| Frontend / UI change | agents/core/developer.md + agents/core/ux.md | Playwright | frontend-design |
+| Deploy to UAT or prod | agents/core/deploy.md | GitHub | — |
+| Market / competitor research | agents/core/research.md | NotebookLM, Brave, Firecrawl | deep-research |
+| Legal review | agents/core/legal.md | Brave Search | owasp-security (if code) |
+| Financial / burn / revenue | agents/core/financial.md | Google Workspace (Sheets) | xlsx |
+| Calendar / scheduling | agents/core/calendar.md | Google Workspace (Calendar) | — |
+| Cross-project proposal | agents/core/trickle-down.md | GitHub (all repos) | — |
+| Nutrition / clinical | agents/domain/nutrition.md | USDA API, Open Food Facts | — |
+| Performance / metrics | agents/core/performance.md | Google Workspace (Sheets) | xlsx |
+| Visual verification | agents/core/ux.md | Playwright | — |
+| Files in dump/ | (auto-route) | GitHub, Filesystem | — |
+
+### The dispatch loop (runs for every task)
+
+**1. IDENTIFY** — what kind of task is this?
+
+**2. DISPATCH** — read the agent file before doing anything
+
+**3. LOOKUP** — agent checks registries:
+- tools/registry.md → what's GOOD and relevant?
+- skills/registry.md → what's relevant and installed?
+- Load the SKILL.md before starting
+
+**4. EXECUTE** — do the work with full context
+
+**5. VERIFY** — mandatory before reporting done
+Read agents/core/ux.md and run the full verification protocol.
+This means ALL applicable layers — not just a screenshot:
+- Layer 0: code review (read changed files, invoke /code-review if installed)
+- Layer 1: start server and confirm it runs without errors
+- Layer 2: visual check at desktop + mobile viewports (Playwright screenshots)
+- Layer 3: functional testing — actually click through the main flows
+- Layer 4: cross-environment check if change touches shared components
+- Layer 5: security check if change touches auth, data, or APIs
+
+See agents/core/ux.md for the full layer applicability table.
+**Do not skip verification. Do not report done without it.**
+
+**6. OUTPUT ROUTING** — where does the result go?
+Code, configs → GitHub (product repo)
+Documents, reports → outputs/documents/[project]/[name]_V[N]_[date].[ext]
+Research → outputs/research/[project]/
+Screenshots → outputs/screenshots/[project]/
+Learnings → learnings/[relevant file].md
+Project status → projects/[env]/[product].md
+
+---
+
 ## JANO'S CONSTRAINTS
 
 - **Available:** Weekdays after 3pm Mexico City time, weekends flexible
@@ -28,7 +84,7 @@ You are NOT a passive logger. You actively challenge, propose, evaluate, and coo
 
 ## CREDENTIALS — NEVER ASK FOR THESE
 
-All API keys live in Jano's private dotfiles repo (`salasoliva27/dotfiles`) and are auto-loaded into every Codespace as environment variables. Do not ask for them in any conversation, in any project repo derived from venture-os.
+All API keys live in Jano's private dotfiles repo (`salasoliva27/dotfiles`) and are auto-loaded into every Codespace as environment variables. Do not ask for them in any conversation, in any project repo derived from janus.
 
 | Key | Env var | Where used |
 |---|---|---|
@@ -47,7 +103,7 @@ All projects use the same Supabase project (`rycybujjedtofghigyxm`). Tables are 
 
 ## SESSION BEHAVIOR — READ THIS FIRST
 
-**This workspace is: `venture-os`**
+**This workspace is: `janus`**
 
 Every time a chat opens — regardless of what the user says first — you MUST do the following before composing any response:
 
@@ -74,10 +130,12 @@ Wait for Jano's answer. Store the chosen mode for the rest of the session. Then 
 - **Manual**: ask before every tool use, including reads and file edits.
 
 ### STEP 1 — AUTOMATIC SESSION START (do this right after getting permission mode)
-1. Call `recall("recent venture-os portfolio work and decisions")` — gets cross-workspace memory
+1. Call `recall("recent janus portfolio work and decisions")` — gets cross-workspace memory
 2. Call `recall("recent lool-ai work")` + `recall("recent freelance-system work")` — loads project context
 3. Read `PROJECTS.md` — current portfolio state
-4. You now have full context. Respond to whatever the user asked.
+4. Check dump/ — are there files to route? Route them before starting the session.
+5. Check drift — for each product with a prod deploy, compare projects/prod/[product].md last tag against current prod HEAD via GitHub MCP. Flag any drift.
+6. You now have full context. Respond to whatever the user asked.
 
 ### WHEN THE USER ASKS "where did we leave off" / "what's the status" / "catch me up"
 This is explicitly answered by the recall() results above. Summarize:
@@ -91,7 +149,7 @@ Before the conversation ends, call `remember()` — even if the user doesn't ask
 ```
 remember(
   content="[summary: what was worked on, decisions made, open questions, next steps]",
-  workspace="venture-os",
+  workspace="janus-ia",
   project="[relevant project]",
   type="session"
 )
@@ -139,7 +197,7 @@ Based on the idea, propose:
 Get approval before creating the repo.
 
 ### Phase 5: Spin up
-- Create project repo using only the project name — never prefix with "venture-os-" (e.g., `lool-ai`, not `venture-os-lool-ai`)
+- Create project repo using only the project name — never prefix with "janus-" (e.g., `lool-ai`, not `janus-lool-ai`)
 - Copy only the declared modules from /modules/ as starting templates
 - Create project entry in PROJECTS.md
 - Backfill any learnings from the master database that are relevant
@@ -205,14 +263,17 @@ Each agent is defined in /agents/. Read the relevant agent file before performin
 
 | Agent | File | Function |
 |---|---|---|
-| Intake | agents/intake.md | New idea → validated project |
-| Legal | agents/legal.md | Compliance, contracts, regulatory flags |
-| Financial | agents/financial.md | P&L, runway, portfolio view |
-| Calendar | agents/calendar.md | Google Cal sync, conflict detection |
-| Performance | agents/performance.md | Dashboards, weekly summaries |
-| Developer | agents/developer.md | Architecture, build sequencing, technical decisions |
-| Trickle-down | agents/trickle-down.md | Cross-project proposal routing |
-| Tools & Skills | TOOLS.md + learnings/mcp-registry.md | Dynamic discovery and verdict tracking for MCPs and skills |
+| Intake | agents/core/intake.md | New idea → validated project |
+| Developer | agents/core/developer.md | Architecture, build, code |
+| Legal | agents/core/legal.md | Compliance, contracts, regulatory flags |
+| Financial | agents/core/financial.md | P&L, runway, portfolio view |
+| Calendar | agents/core/calendar.md | Google Cal sync, conflict detection |
+| Performance | agents/core/performance.md | Dashboards, weekly summaries |
+| Trickle-down | agents/core/trickle-down.md | Cross-project proposal routing |
+| Deploy | agents/core/deploy.md | dev→UAT→prod pipeline, tagging, drift detection |
+| Research | agents/core/research.md | Market research, competitor analysis, data gathering |
+| UX | agents/core/ux.md | Visual verification, Playwright, design system |
+| Nutrition | agents/domain/nutrition.md | Clinical nutrition intelligence (powers nutri-ai) |
 
 ---
 
@@ -235,19 +296,24 @@ The learning database is the compounding value of this system. Never skip it.
 |---|---|
 | All code, configs, markdown, CSVs | GitHub (this repo or project repo) |
 | Client deliverables, shared docs | Google Drive (/VentureOS/[project-name]/) |
-| AI-generated images, videos, campaign media | Cloudflare R2 (bucket: venture-os-media/[project-name]/) |
+| AI-generated images, videos, campaign media | Cloudflare R2 (bucket: janus-media/[project-name]/) |
 
 ---
 
-## TOOLS
+## TOOLS AND SKILLS
 
-All tools and skills are discovered dynamically using the protocols in TOOLS.md. Read TOOLS.md before any tool operation. Check learnings/mcp-registry.md for verdicts before searching. Never install a new MCP tool without Jano's confirmation.
+All tools: tools/registry.md (verdicts, install commands, session logs)
+All skills: skills/registry.md (verdicts, install paths, session logs)
+Discovery protocol: TOOLS.md
+Configs: tools/configs/
 
-The distinction matters: MCP tools give Claude access to external systems. Skills teach Claude how to do something. Both are discovered, both are logged in the registry.
+Agents check these registries before every task.
+Never use a tool or skill without checking the registry first.
+Never install a tool or skill without logging it in the registry.
 
 ### SKILL AUTO-INSTALL RULE
 
-If a task requires a skill that appears in TOOLS.md (CURRENTLY INSTALLED SKILLS table) or learnings/mcp-registry.md (INSTALLED AND WORKING / JANO-RECOMMENDED sections) — **install it automatically without asking**. Do not prompt for confirmation. Skills in the registry are pre-approved.
+If a task requires a skill that appears in TOOLS.md (CURRENTLY INSTALLED SKILLS table) or skills/registry.md (INSTALLED AND WORKING sections) — **install it automatically without asking**. Do not prompt for confirmation. Skills in the registry are pre-approved.
 
 Install command: `npx skills add [repo-url]` or `/plugin marketplace add [org/repo]`
 After installing, invoke it immediately for the task at hand.
@@ -279,12 +345,28 @@ Magic MCP (`mcp__magic`) is configured for website and UI building. Use it for a
 
 ---
 
+## PROJECTS
+
+Full registry: PROJECTS.md → projects/dev/, projects/uat/, projects/prod/
+Portfolio showcase: portfolio/README.md
+
+Active products:
+- nutrIA (agent-os + nutri-ai) — dev in progress
+- lool-ai — dev in progress
+- espacio-bosques — smart contract done, frontend pending
+- longevite-therapeutics — V2 built, pending deploy
+- freelance-system — operational
+
+Platform: agent-os-dev (reusable shell for all conversational products)
+
+---
+
 ## END OF SESSION PROTOCOL
 
 Before ending any session:
 1. Update PROJECTS.md with current state of any projects touched
 2. Write any new learnings to the appropriate learnings file
-2b. Write MCP/skill feedback to `learnings/mcp-registry.md` for any tool or skill used this session — even one line. Format: `[DATE] — [PROJECT] — [VERDICT]: [notes]`
+2b. Write MCP/skill feedback to `tools/registry.md` AND `skills/registry.md` for any tool or skill used this session — even one line. Format: `[DATE] — [PROJECT] — [VERDICT]: [notes]`
 3. Update finances if any money moved or was committed
 4. Push all changes to GitHub
 5. Confirm with Jano: "Session complete. Here's what changed: [summary]"

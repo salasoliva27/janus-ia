@@ -1,5 +1,5 @@
 # MCP REGISTRY — CURATED EXPERIENCE LOG
-## Venture OS | Last updated: 2026-03-30
+## Janus IA | Last updated: 2026-03-30
 
 The system's accumulated knowledge about MCP tools and skills. Grows automatically — a brief entry after every session where a tool or skill is used, a full assessment after every project completes.
 
@@ -31,7 +31,7 @@ The system's accumulated knowledge about MCP tools and skills. Grows automatical
 **Verdict:** DISABLED — triggers Chrome OAuth popup every session (redirect_uri_mismatch)
 **Install:** `@googleworkspace/cli mcp -s drive,gmail,calendar,sheets,slides,docs,forms,tasks,chat`
 **Keys:** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
-- [2026-03-30] — venture-os — BAD (for now): Removed from .mcp.json. Reason: `@alanse/mcp-server-google-workspace` tries to auth on every startup because OAuth tokens aren't persisted between Codespace sessions. This opens Chrome with an OAuth flow that fails (redirect_uri_mismatch — Codespace URL ≠ localhost). Gmail already works via `mcp__claude_ai_Gmail` integration. Re-enable only when: tokens can be persisted in dotfiles OR a service account approach is configured.
+- [2026-03-30] — janus — BAD (for now): Removed from .mcp.json. Reason: `@alanse/mcp-server-google-workspace` tries to auth on every startup because OAuth tokens aren't persisted between Codespace sessions. This opens Chrome with an OAuth flow that fails (redirect_uri_mismatch — Codespace URL ≠ localhost). Gmail already works via `mcp__claude_ai_Gmail` integration. Re-enable only when: tokens can be persisted in dotfiles OR a service account approach is configured.
 - To re-enable: (1) add back to .mcp.json, (2) run auth from local machine (not Codespace), (3) save token JSON to dotfiles for persistence
 
 ### Memory MCP (Supabase)
@@ -61,7 +61,7 @@ The system's accumulated knowledge about MCP tools and skills. Grows automatical
 
 ### Context7
 **Verdict:** CONFIGURED — needs real-use test
-- [2026-03-26] — venture-os — Added to .mcp.json. Will activate on next session start.
+- [2026-03-26] — janus — Added to .mcp.json. Will activate on next session start.
 **Install:** `npx -y @upstash/context7-mcp` | **Keys:** None
 **Why:** Live version-specific docs before generating code. Add "use context7" to any prompt. 89,000+ installs on related skill. Eliminates outdated API answers.
 **Session log:** none yet
@@ -202,7 +202,7 @@ The system's accumulated knowledge about MCP tools and skills. Grows automatical
 **Keys:** `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION` — placeholders in dotfiles. **Lambda deferred — AWS free trial expired, not worth paying yet.** Local rendering works fine for now (renders to out/ folder, free).
 **Why:** React → MP4 at $0.01/render-minute. Proven: Submagic ($1M ARR in 3 months), Crayo ($6M ARR), 10+ companies hitting $1M+ on Remotion. Claude can generate Remotion code from natural language.
 **Use cases in portfolio:** longevite therapy reels, espacio-bosques project update videos, lool-ai store demo videos, freelance-system new service type
-**[2026-04-01] — venture-os — REGISTERED:** Added to TOOLS.md + AWS placeholders to dotfiles. Not yet used in any project build.
+**[2026-04-01] — janus — REGISTERED:** Added to TOOLS.md + AWS placeholders to dotfiles. Not yet used in any project build.
 
 ---
 

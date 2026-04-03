@@ -31,7 +31,7 @@
     },
     "memory": {
       "command": "node",
-      "args": ["/workspaces/venture-os/mcp-servers/memory/index.js"],
+      "args": ["/workspaces/janus/mcp-servers/memory/index.js"],
       "env": {
         "SUPABASE_URL": "${SUPABASE_URL}",
         "SUPABASE_SERVICE_ROLE_KEY": "${SUPABASE_SERVICE_ROLE_KEY}",

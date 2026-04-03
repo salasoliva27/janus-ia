@@ -1,5 +1,5 @@
 # CREDENTIALS & TOOL ACCESS CHECK
-## Venture OS — Central Credential Registry
+## Janus IA — Central Credential Registry
 ### Last updated: 2026-03-25
 
 ---
@@ -12,7 +12,7 @@ All secrets live in Jano's private dotfiles repo (`salasoliva27/dotfiles`), load
 
 When a project (lool-ai, freelance-system, espacio-bosques, etc.) needs a tool credential:
 - Its own TOOLS.md declares which tools it uses
-- It references this file (`venture-os/CREDENTIALS.md`) for setup procedure
+- It references this file (`janus/CREDENTIALS.md`) for setup procedure
 - It does NOT manage credentials itself
 
 If a project is ever handed off to someone outside the portfolio, copy the relevant rows from this file into that project's own CREDENTIALS.md at handoff time.
@@ -54,7 +54,7 @@ echo "=== VOYAGE AI (memory embeddings) ===" && \
 | Env var | Status | MCP server / tool it unlocks |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | ✅ Present | Claude API, memory embeddings fallback |
-| `GITHUB_TOKEN` | ✅ Present (Codespace-scoped) | GitHub MCP — push only to `venture-os`; **replace with PAT to unlock all repos** (see below) |
+| `GITHUB_TOKEN` | ✅ Present (Codespace-scoped) | GitHub MCP — push only to `janus`; **replace with PAT to unlock all repos** (see below) |
 | `BRAVE_API_KEY` | ✅ Present | Brave Search MCP |
 | `SUPABASE_URL` | ✅ Present | Cross-workspace memory MCP |
 | `SUPABASE_SERVICE_ROLE_KEY` | ✅ Present | Cross-workspace memory MCP |
@@ -277,20 +277,20 @@ Each project in the portfolio has its own TOOLS.md that lists which tools it use
 
 ```
 ## Credential setup
-All credentials are managed centrally. See venture-os/CREDENTIALS.md for:
+All credentials are managed centrally. See janus/CREDENTIALS.md for:
 - How to run the live check
 - How to fix any missing keys in salasoliva27/dotfiles
 - Where to find / regenerate each key
 ```
 
-Projects never duplicate credential setup instructions. If instructions drift between repos, the venture-os version wins.
+Projects never duplicate credential setup instructions. If instructions drift between repos, the janus version wins.
 
 ---
 
 ## ADDING A NEW TOOL
 
 1. Add env var to `salasoliva27/dotfiles/.env`
-2. Add to `.mcp.json` in venture-os
+2. Add to `.mcp.json` in janus
 3. Add row to the status table above
 4. Add "where to find" section below if non-obvious
 5. Update `TOOLS.md` with the new tool entry
