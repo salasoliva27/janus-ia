@@ -1,5 +1,5 @@
 # PROJECTS REGISTRY
-## Last updated: 2026-04-05
+## Last updated: 2026-04-06
 
 This is the heartbeat of Janus IA. Every project is registered here. The master agent reads this at the start of every session.
 
@@ -47,11 +47,28 @@ This is the heartbeat of Janus IA. Every project is registered here. The master 
 ---
 
 ### espacio-bosques
-Community blockchain funding platform. On-chain escrow + AI project creation.
-No MetaMask — fiat via Bitso API. Auth: Supabase email/PIN + Google.
-- **Dev:** github.com/salasoliva27/espacio-bosques-dev
-- **Status:** 🔄 POC overhaul — simulation mode, Bitso sandbox, Supabase auth
+Community funding platform for Bosques de las Lomas. Residents propose, fund, and track
+neighborhood projects. Fiat-first (MXN via Bitso), AI blueprint creation, milestone-gated escrow.
+- **Repo:** github.com/salasoliva27/espacio_bosques
+- **URLs (Codespace sturdy-orbit-g67qwj5pjjqcwwjr):**
+  - Frontend: https://sturdy-orbit-g67qwj5pjjqcwwjr-5173.app.github.dev
+  - Backend: https://sturdy-orbit-g67qwj5pjjqcwwjr-3001.app.github.dev
+- **Demo account:** demo@bosques.mx / bosques123 (pre-confirmed in Supabase)
+- **Status:** 🔄 POC complete — simulation mode fully functional, persistent storage next
 - **Legal flag:** Ley Fintech / CNBV — using Bitso as licensed IFPE
+- **Stack:** React + Vite + Tailwind (dark, teal) · Supabase auth · Express · Prisma · Anthropic claude-sonnet-4-6 · Bitso sandbox · Lucide icons
+- **POC done (April 2026):**
+  - ✅ Supabase email/password + Google OAuth
+  - ✅ AI blueprint creation + conversational chat refinement
+  - ✅ Bitso MXN→ETH quote + simulated investment flow
+  - ✅ Funding progress updates live after investment (shared simStore)
+  - ✅ Full EN/ES i18n across all pages
+  - ✅ Simulation mode — zero infrastructure required to demo
+  - ✅ Sign-up name field, display name in navbar
+- **Next:**
+  - ⬜ User profile page (/profile)
+  - ⬜ Supabase persistent schema (bosques_profiles, bosques_projects, etc.)
+  - ⬜ Wire project creation + investments to persist in Supabase
 
 ---
 
@@ -122,4 +139,4 @@ None yet.
 |---|---|---|---|---|
 | freelance-system | Operational | ✅ | No revenue yet | Get first lead |
 | lool-ai | Build in progress | 🔄 Core widget done | No spend yet | Attribution tracking → embeddable widget |
-| espacio-bosques | POC overhaul | 🔄 Active | No spend yet | Bitso keys + Supabase SQL |
+| espacio-bosques | POC complete | 🔄 Active | No spend yet | Supabase schema + profile page |
