@@ -1,4 +1,4 @@
-make sure that tool is added to # TOOLS REGISTRY
+make sure that tool is added to page # TOOLS REGISTRY
 ## Janus IA — Dynamic Discovery
 ## Last updated: 2026-03-25
 
