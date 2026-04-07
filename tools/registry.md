@@ -55,6 +55,16 @@ Visual verification for all frontend changes. Owned by ux agent.
 Note: run `npx playwright install chromium` once per Codespace.
 - [2026-03-26] — longevite-therapeutics — GOOD: browser_install needed once per environment. Navigate + screenshot work perfectly after that.
 
+### Spline MCP (spline-mcp-server)
+**Verdict:** SITUATIONAL — use for Spline 3D scene generation code
+**Install:** `git clone https://github.com/Tarif-dev/spline-mcp-server /tmp/spline-mcp-server && cd /tmp/spline-mcp-server && npm install && npx tsc`
+**Config:** `~/.claude/settings.json` → mcpServers.spline (already added, points to /tmp/spline-mcp-server/dist/index.js)
+**Keys:** `SPLINE_API_KEY` (optional), `SPLINE_DEFAULT_FRAMEWORK=react`
+**Scope:** Code generation for @splinetool/react-spline embeds. Does NOT create/edit scenes — use Spline editor for that.
+**To activate scenes in espacio-bosques:** Set `VITE_SPLINE_HERO` and `VITE_SPLINE_ACCENT` in `.env` to published .splinecode URLs.
+**Note:** Python lesleslie/spline-mcp requires Python 3.13+ (incompatible with Codespace 3.12).
+- [2026-04-07] — espacio-bosques — SITUATIONAL: Installed Node.js version. Landing.tsx wired with lazy Spline + error boundary. Awaiting real scene URLs from Jano.
+
 ### Filesystem, Fetch, Sequential Thinking
 **Verdict:** GOOD — built-in, no credentials
 
