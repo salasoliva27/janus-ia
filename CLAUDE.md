@@ -335,6 +335,27 @@ Before touching any code or files, you MUST complete this checklist:
 - If you must restructure, copy existing content into the new structure first, then refine
 - Before committing, diff your changes and verify no content was lost
 
+### TEST ENDPOINTS — MANDATORY FOR EVERY BACKEND PROJECT
+
+Every project with a backend API **must** have:
+
+1. **A `/api/test/` namespace** — mounted only when `SIMULATION_MODE=true` or `NODE_ENV=development`. Never active in production.
+   - `GET /api/test` — self-documenting: list all test endpoints with curl examples
+   - `GET /api/test/state` — dump current application state (store contents, counts, percentages)
+   - `POST /api/test/[action]` — simulate key actions without going through the UI
+   - `POST /api/test/reset` — wipe sim data back to seed state
+
+2. **A `scripts/test-api.sh`** — shell script that exercises the full API flow end-to-end:
+   - Authenticates using demo credentials (gets a real JWT from Supabase or auth provider)
+   - Calls each major endpoint in sequence
+   - Prints colored output with ✓/✗ for each step
+   - Supports flags: `--state` (state only), `--sim` (no auth), `--reset` (reset state)
+   - Run with: `bash scripts/test-api.sh`
+
+**Standard: always use the minimum required amount/value** when test endpoints trigger transactions (e.g., 100 MXN minimum for investments, not arbitrary large numbers).
+
+When building or modifying a backend feature, update `test.ts` and `test-api.sh` to cover the new surface. The test script is how future sessions verify the system works before touching anything.
+
 ### ALWAYS USE GET-SHIT-DONE (GSD)
 
 GSD is installed at `~/.claude/commands/gsd/`. For any significant build task (new feature, full page build, multi-file refactor), use `/gsd:do [task]` or `/gsd:execute-phase` to get structured, verified execution. GSD prevents context rot and ensures work is verified before completion.
