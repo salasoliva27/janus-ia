@@ -1,5 +1,5 @@
 # PROJECTS REGISTRY
-## Last updated: 2026-04-06
+## Last updated: 2026-04-08
 
 This is the heartbeat of Janus IA. Every project is registered here. The master agent reads this at the start of every session.
 
@@ -66,9 +66,16 @@ neighborhood projects. Fiat-first (MXN via Bitso), AI blueprint creation, milest
   - ✅ Simulation mode — zero infrastructure required to demo
   - ✅ Sign-up name field, display name in navbar
   - ✅ User profile page (/profile) — avatar, name edit, stats, investment history, full i18n
+  - ✅ SAT RFC validation + CFDI/PDF AI document analysis (Claude vision + XML parser)
+  - ✅ CompletionRequest flow: provider submits evidence → EVIDENCE_REVIEW → community votes
+  - ✅ Voting thresholds: <5 investors → owner review; 5–9 → 66.7%; 10+ → 75%
+  - ✅ NotificationBell in navbar: job matches, completion submissions, vote results
+  - ✅ EvidenceReview component: AI doc badges, vote tally bar, owner decision panel
+  - ✅ Test harness: simulate-completion, cast-completion-vote, owner-decide endpoints
 - **Decision:** Supabase persistent schema intentionally deferred — simulation mode is good for demos
 - **Next:**
   - ⬜ First real demo / stakeholder walkthrough
+  - ⬜ Seed 5+ investors to exercise the PENDING_VOTES threshold path (currently only 4 → OWNER_REVIEW)
 
 ---
 
@@ -118,6 +125,31 @@ neighborhood projects. Fiat-first (MXN via Bitso), AI blueprint creation, milest
   - ⬜ Connect contact form to backend (email / WhatsApp)
   - ⬜ Google Analytics
 - **Status:** 🔄 V2 live on GitHub — ready to deploy
+
+---
+
+---
+
+### mercado-bot-dev
+- **Repo:** github.com/salasoliva27/venture-os (subfolder: `projects/mercado-bot-dev/`)
+- **Type:** Prediction market trading bot — simulation + research tool
+- **Interaction model:** Event-driven — pipeline runs on demand via dashboard UI
+- **Stage:** Build in progress — dashboard v1 complete
+- **Modules:** build 🔄
+- **Stack:** Python backend (agents, scripts) · React + Vite dashboard · Recharts · Anthropic claude-sonnet-4-20250514 (PREDICT step) · Kelly Criterion position sizing
+- **Build status (2026-04-08):**
+  - ✅ Dashboard: React + Vite app at `projects/mercado-bot-dev/dashboard/`
+  - ✅ Runs at port 5174 (Codespace port forwarding)
+  - ✅ Pipeline runner: SCAN → RESEARCH → PREDICT → EXECUTE → COMPOUND with live step animation
+  - ✅ PREDICT step calls Claude API directly from browser (with fallback signals)
+  - ✅ Kelly Criterion calculator widget (live position sizing)
+  - ✅ Portfolio P&L chart with recharts (28-point history + live updates)
+  - ✅ Signals table with direction badges and bet sizes
+  - ✅ Trade log with win/loss dots and P&L
+  - ✅ Risk monitor: drawdown %, API cost, kill switch status, sim mode
+  - ✅ SIMULATION_MODE hardcoded — Live trading locked (requires US entity)
+  - ✅ Dark terminal aesthetic (Share Tech Mono + Barlow Condensed + CRT scan lines)
+- **Status:** 🔄 Dashboard v1 built and running. Python backend scaffolding next.
 
 ---
 
