@@ -112,6 +112,19 @@ All projects use the same Supabase project (`rycybujjedtofghigyxm`). Tables are 
 
 ---
 
+## CONTEXT MANAGEMENT — MANDATORY
+
+**Never ask Jano to open a new conversation. Always use `/compact` instead.**
+
+When context reaches ~85% (system warning appears), STOP what you're doing and:
+1. Ask: *"Context is getting full. Should I `/compact` now and keep going in this same conversation?"*
+2. Wait for confirmation — then run `/compact`
+3. After compacting, resume exactly where you left off (re-read any files needed)
+
+This applies in ALL repos and ALL Codespaces. The goal is zero conversation restarts — everything happens in one continuous session per working block.
+
+---
+
 ## SESSION BEHAVIOR — READ THIS FIRST
 
 **This workspace is: `janus-ia`**
