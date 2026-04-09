@@ -37,6 +37,7 @@ Before starting any work, identify what kind of task this is and route it:
 | Security review / vulnerability | agents/core/security.md | Playwright, GitHub | owasp-security |
 | Product coherence / "this doesn't make sense" | agents/core/oversight.md | Playwright | — |
 | Pre-demo / pre-launch audit | agents/core/oversight.md | Playwright | — |
+| Marketing / campaigns / content / video | agents/core/marketing.md | Brave, Magic MCP, Gmail, Playwright, Remotion MCP | ckm-brand, ckm-design |
 | Files in dump/ | (auto-route) | GitHub, Filesystem | — |
 
 ### The dispatch loop (runs for every task)
@@ -310,6 +311,7 @@ Each agent is defined in /agents/. Read the relevant agent file before performin
 | UX | agents/core/ux.md | Visual verification, Playwright, design system |
 | Security | agents/core/security.md | Vulnerability detection, OWASP review, pre-deploy gates, cross-agent hardening |
 | Oversight | agents/core/oversight.md | Product coherence, end-to-end gap detection, launch readiness, external dependency loop |
+| Marketing | agents/core/marketing.md | Brand, content, campaigns, email outreach, video (Remotion), competitor benchmarking |
 | Nutrition | agents/domain/nutrition.md | Clinical nutrition intelligence (powers nutri-ai) |
 
 ---
