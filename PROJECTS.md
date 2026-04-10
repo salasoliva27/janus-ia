@@ -153,6 +153,30 @@ neighborhood projects. Fiat-first (MXN via Bitso), AI blueprint creation, milest
 
 ---
 
+### jp-ai (Ozum AI-OS)
+- **Repo:** github.com/salasoliva27/jp-ai
+- **Type:** Client project — AI operating system for Ozum (corporate events & incentive travel agency)
+- **Interaction model:** Spec-fed — Jano builds for JP (Juan Pablo García, CSO at Ozum)
+- **Stage:** Setup complete — CRM Phase 1 pending
+- **Modules:** build 🔄
+- **Stack:** CLAUDE.md orchestrator · 10 specialized agents · Supabase collective memory · MCP: Playwright, Brave, GitHub, Context7 · CRM stack: Next.js + Supabase + Claude API
+- **About Ozum:** Corporate event planning + incentive travel + DMC, 30+ years, Mexico + USA. Team: Malú (CEO), Juan Pablo (CSO), Pilar (CFO).
+- **Build status (2026-04-10):**
+  - ✅ Repo created and pushed — salasoliva27/jp-ai (private)
+  - ✅ CLAUDE.md brain — Ozum-tuned, multi-user (all employees), role-aware
+  - ✅ 10 agents: sales, events, travel, vendor, marketing, financial, developer, deploy, ux, security, research
+  - ✅ Domain agent: corporate-events.md (industry intelligence, pricing benchmarks, WC2026)
+  - ✅ Dotfiles: .env.example (all keys documented) + setup.sh (one-command onboarding)
+  - ✅ Collective memory: memory/MEMORY.md index (Supabase ozum_memories table — to be wired)
+  - ✅ CRM project spec: projects/dev/crm.md (Phase 1–4 roadmap)
+  - ✅ .mcp.json pre-configured (Playwright, Brave, GitHub, Context7, Sequential Thinking)
+  - ⬜ Supabase project creation + ozum_memories table (collective memory MCP wiring)
+  - ⬜ CRM Phase 1 build (lead intake + AI proposal generator)
+  - ⬜ Transfer repo to Ozum GitHub org when JP creates one
+- **Next:** Wire collective memory MCP → start CRM Phase 1
+
+---
+
 ## COMPLETED PROJECTS
 
 None yet.
