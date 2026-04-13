@@ -1,3 +1,9 @@
+---
+type: brain
+project: janus-ia
+tags: [brain, orchestrator, dispatch, agents]
+updated: 2026-04-13
+---
 # JANUS IA — MASTER BRAIN
 ## Version 2 | April 2026
 
@@ -155,13 +161,43 @@ Wait for Jano's answer. Store the chosen mode for the rest of the session. Then 
 - **Manual**: ask before every tool use, including reads and file edits.
 
 ### STEP 1 — AUTOMATIC SESSION START (do this right after getting permission mode)
-1. Call `mcp__janus-memory__recall(query="recent janus portfolio work and decisions", workspace="janus-ia")` — loads portfolio context
-2. Call `mcp__janus-memory__recall(query="recent espacio-bosques work decisions bugs")` — loads espacio-bosques context
-3. Call `mcp__janus-memory__recall(query="recent lool-ai nutria freelance work")` — loads other project context
-4. Read `PROJECTS.md` — current portfolio state
-5. Check dump/ — are there files to route? Route them before starting the session.
-6. Check drift — for each product with a prod deploy, compare projects/prod/[product].md last tag against current prod HEAD via GitHub MCP. Flag any drift.
-7. You now have full context. Respond to whatever the user asked.
+
+#### 1a — Load memory (parallel)
+1. recall("recent janus portfolio work and decisions")
+2. recall("recent espacio-bosques work")
+3. recall("recent lool-ai work")
+4. recall("recent nutrIA work")
+
+#### 1b — Load vault context
+5. Read `PROJECTS.md` — current status of all projects
+6. Read `learnings/cross-project-map.md` — relationship graph between projects
+7. Read `wiki/index.md` — vault entry point
+
+#### 1c — MANDATORY CROSS-SYNTHESIS
+Before responding to anything, complete these checks silently:
+
+**Legal:** Does this session touch any project with LFPDPPP or Ley Fintech exposure?
+Surface it if yes.
+
+**Market:** Does this request overlap with another project's geography or audience?
+Mention the connection.
+
+**Tech:** Has this pattern been solved in another project already?
+Point to it instead of rebuilding.
+
+**Capacity:** Is the 6-8 session backlog still full?
+Flag if Jano is about to commit to new work.
+
+**Opportunity:** Does anything discovered create a cross-project opportunity?
+Mention it once, briefly.
+
+This synthesis runs in ~10 seconds. It is NOT optional. It prevents duplicating
+legal work, rebuilding existing patterns, and missing market overlaps.
+
+#### 1d — Session state
+8. Check `dump/` — route any files
+9. Check drift — compare projects/prod/ tags to current HEAD via GitHub MCP
+10. Respond to the user
 
 ### WHEN THE USER ASKS "where did we leave off" / "what's the status" / "catch me up"
 This is explicitly answered by the recall results above. Summarize:
@@ -171,20 +207,27 @@ This is explicitly answered by the recall results above. Summarize:
 - Any open questions or blockers
 
 ### END OF EVERY SESSION
-Before the conversation ends, call `mcp__janus-memory__remember` — even if the user doesn't ask:
+Before ending:
+1. Update `PROJECTS.md` with any status changes
+2. Update `learnings/cross-project-map.md` with NEW connections found this session
+   (add [[wiki links]] so Obsidian draws the edges)
+3. Write learnings to the appropriate learnings/ file
+4. Write MCP/tool feedback to tools/registry.md
+5. Push changes to GitHub
+6. claude-mem handles session compression automatically — no manual remember() needed
+   (only call remember() for explicit cross-session decisions that should be findable by name)
+
+For significant named decisions, still call remember() with type="decision":
 ```
 mcp__janus-memory__remember(
-  name="session_[YYYY-MM-DD]_[short-slug]",
-  content="[summary: what was worked on, decisions made, open questions, next steps]",
-  type="session",
+  name="decision_[YYYY-MM-DD]_[short-slug]",
+  content="[decision made and reasoning]",
+  type="decision",
   workspace="janus-ia",
-  project="[relevant project or omit if cross-project]",
+  project="[relevant project]",
   description="[one-line summary]"
 )
 ```
-For significant decisions or learnings, call remember() separately with type="decision" or type="learning".
-
-**Never skip the end-of-session remember(). It is how the next chat will know what happened here.**
 
 ### MEMORY TOOLS REFERENCE
 | Tool | When to use |

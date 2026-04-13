@@ -203,6 +203,45 @@ Zero hallucinations — only answers from what you uploaded.
 
 ---
 
+## VAULT + MEMORY TOOLS (added 2026-04-13)
+
+### claude-mem
+**Verdict:** GOOD
+**Install:** `npx claude-mem install` (plugin marketplace)
+**Version:** 12.1.0
+**Why:** Automatic session compression + memory. Hooks into lifecycle. Web viewer at localhost:37777. Replaces manual remember() for standard sessions.
+- [2026-04-13] — janus — GOOD: Installed successfully. Hooks registered via marketplace plugin.
+
+### mcpvault (obsidian-vault MCP)
+**Verdict:** UNTESTED — in .mcp.json, needs first use to validate
+**Package:** `@bitbonsai/mcpvault`
+**Vault path:** /workspaces/venture-os
+**Why:** Read/write vault markdown from Codespace. 14 tools. Enables Claude to navigate wiki/ and [[wiki links]] programmatically.
+- [2026-04-13] — janus — REGISTERED: Added to .mcp.json. First use will validate.
+
+### obra/knowledge-graph
+**Verdict:** UNTESTED — in .mcp.json, needs first use to validate
+**Package:** `obra-knowledge-graph`
+**Why:** Graph traversal on vault. kg_search, kg_paths, kg_common, kg_subgraph. "Find all files connected to both lool-ai and the legal agent."
+- [2026-04-13] — janus — REGISTERED: Added to .mcp.json. First use will validate.
+
+### Supabase MCP
+**Verdict:** PENDING — blocked on SUPABASE_ACCESS_TOKEN + SUPABASE_PROJECT_REF in dotfiles
+**Type:** HTTP MCP (remote)
+**URL:** https://mcp.supabase.com/mcp
+**Required env:** SUPABASE_ACCESS_TOKEN (get from supabase.com/dashboard/account/tokens), SUPABASE_PROJECT_REF=rycybujjedtofghigyxm
+**Why:** Manage Supabase tables, run migrations, inspect RLS policies directly from Claude Code. No more copy-paste SQL.
+- [2026-04-13] — janus — PENDING: Added to .mcp.json. Blocked on Jano adding SUPABASE_ACCESS_TOKEN to dotfiles.
+
+### Graphify
+**Verdict:** BAD/AVOID — packages not stable
+**pip graphify:** Does not exist (404 on PyPI)
+**npm @mohammednagy/graphify-ts@0.1.5:** Broken peer dep (missing typescript module). Published 2026-04-12.
+**Why:** Intended for codebase structure graph. Check back in a few months.
+- [2026-04-13] — janus — BAD/AVOID: Both pip and npm packages broken. Do not attempt.
+
+---
+
 ## REJECTED / AVOID
 *(Populate as bad experiences accumulate)*
 

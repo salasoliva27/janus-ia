@@ -37,3 +37,12 @@ When a new project is spun up with the legal module:
 
 ### Standing rule
 Never advise Jano to ignore a legal requirement because it's inconvenient. Flag it, explain the risk, propose a path forward.
+
+---
+
+## Applies to
+- [[wiki/lool-ai]] — LFPDPPP facial data
+- [[wiki/nutria]] — LFPDPPP health data
+- [[wiki/espacio-bosques]] — Ley Fintech / CNBV
+- [[wiki/freelance-system]] — SAT / CFDI 4.0
+- [[wiki/jp-ai]] — client data handling

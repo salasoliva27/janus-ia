@@ -27,3 +27,13 @@ Master /finances/portfolio.md maintains:
 
 ### Currency
 All tracking in MXN. Note USD amounts where relevant (e.g., Cloudflare R2, Alchemy) and convert at current rate.
+
+---
+
+## Applies to
+- [[wiki/freelance-system]]
+- [[wiki/lool-ai]]
+- [[wiki/espacio-bosques]]
+- [[wiki/nutria]]
+- [[wiki/mercado-bot]]
+- [[wiki/jp-ai]]

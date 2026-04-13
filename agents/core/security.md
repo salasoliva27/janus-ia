@@ -164,3 +164,11 @@ A deploy is **APPROVED** only when all applicable layers pass.
 3. **Never approve user data collection without RLS verified.** Supabase public by default is a known footgun.
 4. **Security findings go into SECURITY.md in the project** — not just in chat. They must persist.
 5. **Do not create security theater** — skip checks that don't apply, run hard on the ones that do.
+
+---
+
+## Applies to
+- [[wiki/espacio-bosques]] — Ley Fintech, real-money flows
+- [[wiki/lool-ai]] — LFPDPPP facial data
+- [[wiki/nutria]] — LFPDPPP health data
+- [[wiki/jp-ai]] — client data handling

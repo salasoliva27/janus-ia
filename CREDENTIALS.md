@@ -287,6 +287,46 @@ Projects never duplicate credential setup instructions. If instructions drift be
 
 ---
 
+## MEMORY + VAULT TOOLS
+
+### claude-mem
+Where to get: No key needed
+Install: `npx claude-mem install`
+Web viewer: http://localhost:37777
+Search: `/mem-search` in Claude Code
+Status: ✅ Installed (v12.1.0) — automatic session capture
+Notes: Hooks into session lifecycle. Replaces manual remember() at session end for standard sessions.
+
+### mcpvault (Obsidian MCP)
+Where to get: No key needed
+Install: npx @bitbonsai/mcpvault /workspaces/venture-os
+Status: ✅ In .mcp.json (obsidian-vault server)
+Notes: Reads/writes janus-ia vault from Codespace. 14 tools for vault operations.
+
+### obra/knowledge-graph
+Where to get: No key needed
+Install: npx obra-knowledge-graph (KG_VAULT_PATH set in .mcp.json)
+Status: ✅ In .mcp.json (knowledge-graph server)
+Notes: Graph traversal on vault. Semantic search + path finding across [[wiki links]].
+
+### Graphify
+Where to get: No key needed (uses ANTHROPIC_API_KEY for semantic extraction)
+Install: ⚠️ NOT AVAILABLE — pip package doesn't exist; npm @mohammednagy/graphify-ts@0.1.5 has broken peer dep (missing typescript)
+Status: ⬜ Blocked — check back when package matures
+Notes: Intended for codebase structure graph per repo. Try again when a stable version ships.
+
+### SUPABASE_ACCESS_TOKEN
+Where to get: supabase.com/dashboard/account/tokens → Generate new token → name "janus-mcp"
+Add to dotfiles: `export SUPABASE_ACCESS_TOKEN=your_token`
+Status: ⬜ Pending — needs token from dashboard
+
+### SUPABASE_PROJECT_REF
+Value: rycybujjedtofghigyxm
+Add to dotfiles: `export SUPABASE_PROJECT_REF=rycybujjedtofghigyxm`
+Status: ⬜ Pending — add to dotfiles
+
+---
+
 ## ADDING A NEW TOOL
 
 1. Add env var to `salasoliva27/dotfiles/.env`

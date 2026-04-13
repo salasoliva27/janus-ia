@@ -1,0 +1,43 @@
+{
+  "collapse-filter": false,
+  "search": "",
+  "showTags": true,
+  "showAttachments": false,
+  "hideUnresolved": false,
+  "showOrphans": true,
+  "collapse-color-groups": false,
+  "colorGroups": [
+    {
+      "query": "path:agents/",
+      "color": { "a": 1, "rgb": 14495548 }
+    },
+    {
+      "query": "path:projects/",
+      "color": { "a": 1, "rgb": 14737632 }
+    },
+    {
+      "query": "path:learnings/",
+      "color": { "a": 1, "rgb": 5614830 }
+    },
+    {
+      "query": "path:finances/",
+      "color": { "a": 1, "rgb": 16312092 }
+    },
+    {
+      "query": "path:wiki/",
+      "color": { "a": 1, "rgb": 8978380 }
+    }
+  ],
+  "collapse-display": false,
+  "showArrow": true,
+  "textFadeMultiplier": 0,
+  "nodeSizeMultiplier": 1.2,
+  "lineSizeMultiplier": 1,
+  "collapse-forces": false,
+  "centerStrength": 0.518713248970312,
+  "repelStrength": 10,
+  "linkStrength": 1,
+  "linkDistance": 30,
+  "scale": 1,
+  "close": false
+}

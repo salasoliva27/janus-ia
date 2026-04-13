@@ -31,3 +31,9 @@ Walmart MX: https://super.walmart.com.mx/search?q=[ingredient]
 ### Clinical flags — always stop and refer to doctor
 HbA1c >8% · active CKD · history of eating disorder · BMI <17 or >45
 Pregnancy/breastfeeding without doctor clearance · active chemotherapy
+
+---
+
+## Applies to
+- [[wiki/nutria]] — primary consumer
+- [[wiki/longevite]] — clinical context for IV therapy nutrition claims

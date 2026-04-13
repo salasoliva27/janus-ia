@@ -1,5 +1,5 @@
 # SKILLS REGISTRY
-## Janus IA | Last updated: 2026-04-03
+## Janus IA | Last updated: 2026-04-09
 
 All skills available across Janus IA projects.
 Skills teach Claude how to do something before a task starts.
@@ -42,6 +42,25 @@ Use to build new custom skills for Janus IA.
 **Verdict:** INSTALLED — not yet invoked via /feature-dev
 7-phase structured workflow. Most popular Claude Code skill (89k installs).
 Located: /home/codespace/.claude/plugins/marketplaces/...
+
+---
+
+## MARKETING SKILLS — NOT YET INSTALLED
+
+### marketingskills (coreyhaines31) ⭐ JANO-RECOMMENDED
+35 marketing skills for CRO, SEO, copywriting, growth, GTM, and analytics.
+19.9k stars. Works with Claude Code, Codex, Cursor.
+**Foundation skill:** `product-marketing-context` — all others read this first.
+Install individual skills: `npx skills add https://github.com/coreyhaines31/marketingskills/skills/[skill-name]`
+Install all: `npx skills add https://github.com/coreyhaines31/marketingskills`
+
+**Priority picks per project:**
+- espacio-bosques → `launch-strategy`, `page-cro`, `pricing-strategy`
+- lool-ai → `cold-email`, `sales-enablement`, `competitor-alternatives`
+- nutria-app → `onboarding-cro`, `email-sequence`, `churn-prevention`
+
+**Full skill list:**
+`ab-test-setup` · `ad-creative` · `ai-seo` · `analytics-tracking` · `churn-prevention` · `cold-email` · `community-marketing` · `competitor-alternatives` · `content-strategy` · `copy-editing` · `copywriting` · `customer-research` · `email-sequence` · `form-cro` · `free-tool-strategy` · `launch-strategy` · `lead-magnets` · `marketing-ideas` · `marketing-psychology` · `onboarding-cro` · `page-cro` · `paid-ads` · `paywall-upgrade-cro` · `popup-cro` · `pricing-strategy` · `product-marketing-context` · `programmatic-seo` · `referral-program` · `revops` · `sales-enablement` · `schema-markup` · `seo-audit` · `signup-flow-cro` · `site-architecture` · `social-content`
 
 ---
 

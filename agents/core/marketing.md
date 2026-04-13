@@ -119,3 +119,11 @@ Before any campaign, run a competitor audit:
 - Never spend ad budget without explicit approval + budget cap confirmed
 - Always check if a campaign overlaps with another project's target audience (flag it)
 - Creative assets go through the UX agent for visual quality check before shipping
+
+---
+
+## Applies to
+- [[wiki/lool-ai]] — optical SME outreach
+- [[wiki/espacio-bosques]] — community resident acquisition
+- [[wiki/longevite]] — clinic patient acquisition
+- [[wiki/nutria]] — health-conscious demographic

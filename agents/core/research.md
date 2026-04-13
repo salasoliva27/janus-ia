@@ -28,3 +28,11 @@ Never leave research only in the chat — always save to outputs/
 - Mexico/LATAM relevance flagged
 - Confidence level (verified / inferred / uncertain)
 - Recommended next steps
+
+---
+
+## Applies to
+- [[wiki/lool-ai]] — optical market research, CDMX store prospecting
+- [[wiki/espacio-bosques]] — DAO market, Bosques de las Lomas community
+- [[wiki/nutria]] — clinical nutrition research
+- [[wiki/jp-ai]] — corporate events / incentive travel market

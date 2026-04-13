@@ -186,3 +186,13 @@ Typography: Playfair Display (display) · DM Mono (UI/data)
 
 Motion: spring physics on panel open · radial glow on agent response ·
 breathing scale on idle buttons · momentum swipe between pages
+
+---
+
+## Applies to
+- [[wiki/espacio-bosques]] — all UI verification
+- [[wiki/lool-ai]] — AR overlay visual QA
+- [[wiki/nutria]] — PWA + widget QA
+- [[wiki/longevite]] — static site QA
+- [[wiki/mercado-bot]] — dashboard QA
+- [[wiki/jp-ai]] — CRM QA

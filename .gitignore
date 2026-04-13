@@ -3,3 +3,6 @@
 node_modules/
 .DS_Store
 .playwright-mcp/
+# Obsidian personal state (do not commit — machine-specific)
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json

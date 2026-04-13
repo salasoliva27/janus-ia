@@ -1,5 +1,11 @@
+---
+type: registry
+project: janus-ia
+tags: [projects, portfolio, status]
+updated: 2026-04-13
+---
 # PROJECTS REGISTRY
-## Last updated: 2026-04-08
+## Last updated: 2026-04-13
 
 This is the heartbeat of Janus IA. Every project is registered here. The master agent reads this at the start of every session.
 

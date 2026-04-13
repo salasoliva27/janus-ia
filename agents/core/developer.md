@@ -154,3 +154,13 @@ When working in a build phase:
 4. Build stage by stage — do not skip ahead
 5. After each stage: update build.md, note actual time vs estimate
 6. At session end: write time reality to learnings/technical.md
+
+---
+
+## Applies to
+- [[wiki/lool-ai]] — AR widget build
+- [[wiki/espacio-bosques]] — DAO platform build
+- [[wiki/nutria]] — clinical nutrition app + widget
+- [[wiki/longevite]] — clinic website
+- [[wiki/mercado-bot]] — prediction market bot
+- [[wiki/jp-ai]] — CRM build
