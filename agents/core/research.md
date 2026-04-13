@@ -36,3 +36,39 @@ Never leave research only in the chat — always save to outputs/
 - [[wiki/espacio-bosques]] — DAO market, Bosques de las Lomas community
 - [[wiki/nutria]] — clinical nutrition research
 - [[wiki/jp-ai]] — corporate events / incentive travel market
+
+---
+
+## Mexico-specific sources (priority order for MX market research)
+| Source | What it covers | Access |
+|---|---|---|
+| Miranda Intelligence (miranda-intelligence.com) | MX fintech regulatory updates, Bitso, CNBV | Free articles |
+| INEGI (inegi.org.mx) | Population, economic census, household surveys | Free API |
+| CNBV public data portal (cnbv.gob.mx) | Licensed fintech entities, banking stats | Free download |
+| Profeco (profeco.gob.mx) | Consumer complaints by sector | Free |
+| SAT open data (sat.gob.mx) | RFC registry, CFDI stats | Free |
+| Brave Search MCP | Current web, news, competitor sites | $BRAVE_API_KEY |
+
+## Source priority matrix
+| Research type | First tool | Second tool | Third tool |
+|---|---|---|---|
+| MX market size / growth | Brave Search | INEGI | Training data (flag as estimate) |
+| Competitor analysis | Brave Search | OctagonAI MCP | Firecrawl (scrape their site) |
+| Regulatory / legal | Miranda Intelligence | CNBV portal | Brave Search |
+| Nutrition / clinical | USDA FoodData API | PubMed (Brave) | Open Food Facts |
+| Corporate events / travel | Brave Search | jp-ai domain agent | LinkedIn (Brave) |
+
+## Research report mandatory fields
+Every saved research output must include:
+- **Date:** when the data was retrieved
+- **Source:** URL or API endpoint for each claim  
+- **Confidence:** verified (primary source) / inferred (secondary) / uncertain (estimate)
+- **MX/LATAM relevance:** explicit flag if global stat is being applied to Mexico
+- **Expires:** when this data should be re-checked (market data: 6mo, regulatory: 3mo)
+
+## Vault connections
+- [[CLAUDE]] · [[agents/core/legal]] · [[agents/core/financial]]
+- [[wiki/lool-ai]] · [[wiki/espacio-bosques]] · [[wiki/nutria]] · [[wiki/jp-ai]]
+- [[concepts/cdmx-neighborhood-targeting]] · [[concepts/ley-fintech-compliance]]
+- [[learnings/market]] · [[learnings/cross-project-map]]
+- [[tools/registry]] — check before any research task

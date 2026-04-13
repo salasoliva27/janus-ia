@@ -251,3 +251,27 @@ Zero hallucinations — only answers from what you uploaded.
 ## Vault connections
 - [[CLAUDE]] · [[learnings/mcp-registry]]
 - [[agents/core/developer]] · [[agents/core/ux]] · [[agents/core/security]]
+
+---
+
+## VISUALIZATION & FINANCIAL DATA MCPs — AVAILABLE (researched 2026-04-13)
+
+### antvis/mcp-server-chart
+**Install:** `npx -y @antv/mcp-server-chart`
+**Verdict:** AVAILABLE — 25+ chart types (line, bar, pie, scatter, heatmap). Useful for financial dashboards and portfolio P&L visualization. No API key needed.
+**Use for:** [[agents/core/financial]] portfolio charts, [[wiki/mercado-bot]] P&L visualization
+
+### OctagonAI/octagon-mcp-server
+**Install:** `npx -y octagon-mcp`
+**Verdict:** AVAILABLE — public SEC filings, earnings transcripts, financial metrics, private market transactions, deep web research. Free tier available.
+**Use for:** [[agents/core/research]] competitor analysis, [[wiki/lool-ai]] market research, [[wiki/espacio-bosques]] comparable DAO analysis
+
+### Vega-Lite MCP (isaacwasserman)
+**Install:** `claude mcp add vega-lite -- npx -y @isaacwasserman/mcp-vegalite-server`
+**Verdict:** AVAILABLE — interactive data visualizations from JSON specs directly in Claude. PNG or artifact output.
+**Use for:** Ad-hoc portfolio charts, market research visualization, session-level data analysis
+
+### Miranda Intelligence (miranda-intelligence.com)
+**Verdict:** RESEARCHED — Mexico fintech newsletter. Free articles. Covers CNBV, Banxico, Bitso, CONDUSEF regulatory updates monthly.
+**Use for:** [[agents/core/research]] MX fintech market updates, [[wiki/espacio-bosques]] regulatory monitoring
+**Key stat found:** Bitso processed $6.5B USD in stablecoin remittances in 2024 — validates espacio-bosques market opportunity
