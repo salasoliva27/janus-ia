@@ -231,7 +231,7 @@ Zero hallucinations — only answers from what you uploaded.
 **URL:** https://mcp.supabase.com/mcp
 **Required env:** SUPABASE_ACCESS_TOKEN (get from supabase.com/dashboard/account/tokens), SUPABASE_PROJECT_REF=rycybujjedtofghigyxm
 **Why:** Manage Supabase tables, run migrations, inspect RLS policies directly from Claude Code. No more copy-paste SQL.
-- [2026-04-13] — janus — PENDING: Added to .mcp.json. Blocked on Jano adding SUPABASE_ACCESS_TOKEN to dotfiles.
+- [2026-04-13] — janus — UNTESTED: Added to .mcp.json. SUPABASE_ACCESS_TOKEN + SUPABASE_PROJECT_REF loaded in dotfiles. Needs first use to validate.
 
 ### Graphify
 **Verdict:** BAD/AVOID — packages not stable

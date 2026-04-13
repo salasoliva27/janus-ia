@@ -318,12 +318,12 @@ Notes: Intended for codebase structure graph per repo. Try again when a stable v
 ### SUPABASE_ACCESS_TOKEN
 Where to get: supabase.com/dashboard/account/tokens → Generate new token → name "janus-mcp"
 Add to dotfiles: `export SUPABASE_ACCESS_TOKEN=your_token`
-Status: ⬜ Pending — needs token from dashboard
+Status: ✅ In dotfiles — loaded
 
 ### SUPABASE_PROJECT_REF
 Value: rycybujjedtofghigyxm
 Add to dotfiles: `export SUPABASE_PROJECT_REF=rycybujjedtofghigyxm`
-Status: ⬜ Pending — add to dotfiles
+Status: ✅ In dotfiles — loaded
 
 ---
 
