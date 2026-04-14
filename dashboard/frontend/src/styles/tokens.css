@@ -1,0 +1,43 @@
+:root,
+[data-theme="dark"] {
+  /* Background */
+  --color-bg-primary: oklch(0.13 0.005 260);
+  --color-bg-secondary: oklch(0.17 0.005 260);
+  --color-bg-surface: oklch(0.20 0.008 260);
+
+  /* Text */
+  --color-text-primary: oklch(0.95 0.005 260);
+  --color-text-secondary: oklch(0.70 0.01 260);
+  --color-text-muted: oklch(0.50 0.01 260);
+
+  /* Accent */
+  --color-accent: oklch(0.75 0.18 180);
+  --color-accent-hover: oklch(0.80 0.18 180);
+  --color-danger: oklch(0.65 0.25 25);
+  --color-success: oklch(0.70 0.20 145);
+
+  /* Borders */
+  --border-color: oklch(0.25 0.005 260);
+  --border-color-hover: oklch(0.35 0.01 260);
+  --border-radius-sm: 4px;
+  --border-radius-md: 8px;
+  --border-radius-lg: 12px;
+
+  /* Spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+
+  /* Typography */
+  --font-family-body: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-family-heading: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-family-mono: "JetBrains Mono", "Fira Code", monospace;
+
+  /* Animation */
+  --animation-speed: 1;
+  --animation-intensity: 1;
+}

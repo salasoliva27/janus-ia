@@ -14,6 +14,12 @@ export function startServer(port: number): Promise<http.Server> {
   const app = express();
   app.use(express.json());
 
+  // Serve frontend static files in production
+  const frontendDist = path.join(path.dirname(new URL(import.meta.url).pathname), "..", "frontend", "dist");
+  if (fs.existsSync(frontendDist)) {
+    app.use(express.static(frontendDist));
+  }
+
   // Health check
   app.get("/health", (_req, res) => {
     res.json({ status: "ok", uptime: process.uptime() });
@@ -31,6 +37,13 @@ export function startServer(port: number): Promise<http.Server> {
     });
     res.json({});
   });
+
+  // SPA fallback — serve index.html for non-API routes
+  if (fs.existsSync(frontendDist)) {
+    app.get("*", (_req, res) => {
+      res.sendFile(path.join(frontendDist, "index.html"));
+    });
+  }
 
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server });
