@@ -1,8 +1,17 @@
-import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import { useRef } from "react";
+import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from "react-resizable-panels";
 import { PanelPlaceholder } from "./PanelPlaceholder";
+import { BottomPanelSwitcher } from "./BottomPanelSwitcher";
+import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import "./ShellLayout.css";
 
 export function ShellLayout() {
+  const chatPanel = useRef<ImperativePanelHandle>(null);
+  const bottomPanel = useRef<ImperativePanelHandle>(null);
+  const workspacePanel = useRef<ImperativePanelHandle>(null);
+
+  useKeyboardShortcuts({ chatPanel, bottomPanel, workspacePanel });
+
   return (
     <PanelGroup
       direction="horizontal"
@@ -10,7 +19,7 @@ export function ShellLayout() {
       style={{ width: "100%", height: "100%" }}
     >
       {/* Left: Chat */}
-      <Panel defaultSize={25} minSize={15} collapsible collapsedSize={0}>
+      <Panel ref={chatPanel} defaultSize={25} minSize={15} collapsible collapsedSize={0}>
         <PanelPlaceholder name="Chat" />
       </Panel>
 
@@ -29,8 +38,8 @@ export function ShellLayout() {
 
           <PanelResizeHandle className="resize-handle resize-handle--horizontal" />
 
-          <Panel defaultSize={0} minSize={15} collapsible collapsedSize={0}>
-            <PanelPlaceholder name="Bottom Panel" />
+          <Panel ref={bottomPanel} defaultSize={0} minSize={15} collapsible collapsedSize={0}>
+            <BottomPanelSwitcher />
           </Panel>
         </PanelGroup>
       </Panel>
@@ -38,7 +47,7 @@ export function ShellLayout() {
       <PanelResizeHandle className="resize-handle resize-handle--vertical" />
 
       {/* Right: Workspace */}
-      <Panel defaultSize={30} minSize={15} collapsible collapsedSize={0}>
+      <Panel ref={workspacePanel} defaultSize={30} minSize={15} collapsible collapsedSize={0}>
         <PanelPlaceholder name="Workspace" />
       </Panel>
     </PanelGroup>
