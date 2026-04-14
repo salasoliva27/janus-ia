@@ -1,0 +1,25 @@
+{
+  "name": "venture-os-dashboard",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "venture-os": "./dist/bin/venture-os.js"
+  },
+  "scripts": {
+    "dev": "tsx bin/venture-os.ts",
+    "build": "tsc",
+    "start": "node dist/bin/venture-os.js"
+  },
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "express": "^5.2.1",
+    "ws": "^8.20.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.6.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2"
+  }
+}
