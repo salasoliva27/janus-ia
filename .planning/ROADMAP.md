@@ -51,7 +51,10 @@ Plans:
   3. Panel sizes persist across browser refreshes
   4. Pull-up panels slide from the bottom when triggered
   5. User can collapse/expand any panel with keyboard shortcuts
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 02-01-PLAN.md — Vite React scaffold, CSS tokens, three-panel ShellLayout
+- [ ] 02-02-PLAN.md — Keyboard shortcuts, pull-up bottom panel tabs, WebSocket connection, static serving
 **UI hint**: yes
 
 ### Phase 3: Chat Panel
@@ -158,7 +161,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation & Bridge Server | 0/3 | Not started | - |
-| 2. Shell Layout | 0/? | Not started | - |
+| 2. Shell Layout | 0/2 | Not started | - |
 | 3. Chat Panel | 0/? | Not started | - |
 | 4. System Graph | 0/? | Not started | - |
 | 5. Activity Feed | 0/? | Not started | - |
