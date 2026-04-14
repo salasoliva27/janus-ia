@@ -134,13 +134,10 @@ export class ClaudeSession {
       }
 
       case "result": {
-        // Session complete
+        // Session complete — text already sent via "assistant" events above,
+        // so do NOT re-send event.result (causes duplicate messages).
         if (event.session_id) {
           this.sessionId = event.session_id;
-        }
-        // Extract final text if present
-        if (typeof event.result === "string" && event.result.length > 0) {
-          this.send({ type: "claude_message", message: event.result });
         }
         break;
       }
