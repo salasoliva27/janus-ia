@@ -3,6 +3,8 @@ import http from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
 import type { ClientMessage, ServerMessage } from "./types.js";
 import { isValidClientMessage } from "./types.js";
+import { ClaudeSession } from "./claude-session.js";
+import { PermissionManager } from "./permissions.js";
 
 export function startServer(port: number): Promise<http.Server> {
   const app = express();
@@ -34,6 +36,9 @@ export function startServer(port: number): Promise<http.Server> {
   wss.on("connection", (ws) => {
     console.log("[ws] client connected");
 
+    const permissionManager = new PermissionManager();
+    const session = new ClaudeSession(ws, permissionManager);
+
     ws.on("message", (raw) => {
       let parsed: unknown;
       try {
@@ -52,21 +57,36 @@ export function startServer(port: number): Promise<http.Server> {
       switch (msg.type) {
         case "start":
           console.log("[ws] session start requested:", msg.prompt.slice(0, 80));
+          // T-01-05: close existing session before starting new one
+          session.close();
+          // Run async, do not await — it streams continuously
+          session.start(msg.prompt, msg.cwd || "/workspaces/venture-os").catch((err) => {
+            console.error("[ws] session error:", err);
+          });
           break;
         case "follow_up":
           console.log("[ws] follow-up requested:", msg.prompt.slice(0, 80));
+          session.followUp(msg.prompt).catch((err) => {
+            console.error("[ws] follow-up error:", err);
+          });
           break;
         case "permission_response":
           console.log("[ws] permission response:", msg.id, msg.allowed);
+          permissionManager.resolve(msg.id, msg.allowed);
           break;
         case "interrupt":
           console.log("[ws] interrupt requested");
+          session.interrupt().catch((err) => {
+            console.error("[ws] interrupt error:", err);
+          });
           break;
       }
     });
 
     ws.on("close", () => {
       console.log("[ws] client disconnected");
+      permissionManager.rejectAll();
+      session.close();
     });
   });
 
