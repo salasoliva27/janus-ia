@@ -1,3 +1,5 @@
+import { ShellLayout } from "./components/ShellLayout";
+
 export default function App() {
-  return <div>Loading...</div>;
+  return <ShellLayout />;
 }

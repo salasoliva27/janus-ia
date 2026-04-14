@@ -1,0 +1,19 @@
+.resize-handle {
+  background: var(--border-color);
+  transition: background 0.15s ease;
+}
+
+.resize-handle:hover,
+.resize-handle[data-resize-handle-active] {
+  background: oklch(0.75 0.18 180 / 0.5);
+}
+
+.resize-handle--vertical {
+  width: 4px;
+  cursor: col-resize;
+}
+
+.resize-handle--horizontal {
+  height: 4px;
+  cursor: row-resize;
+}
