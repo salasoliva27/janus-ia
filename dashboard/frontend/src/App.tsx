@@ -1,53 +1,49 @@
-import { ShellLayout } from "./components/ShellLayout";
-import { useWebSocket, type ConnectionStatus } from "./hooks/useWebSocket";
+import { useEffect } from 'react';
+import { ShellLayout } from './components/ShellLayout';
+import { TopBar } from './components/TopBar';
+import { CommandPalette } from './components/CommandPalette';
+import { PortfolioScoreboard } from './components/PortfolioScoreboard';
+import { CrossProjectFlash } from './components/CrossProjectFlash';
+import { DashboardProvider, useBridgeHandler, useRegisterWsSend } from './store';
+import { useWebSocket } from './hooks/useWebSocket';
+import type { ServerMessage } from './types/bridge';
 
-function StatusDot({ status }: { status: ConnectionStatus }) {
-  const colors: Record<ConnectionStatus, string> = {
-    connected: "var(--color-success)",
-    connecting: "oklch(0.75 0.15 85)",
-    disconnected: "var(--color-danger)",
-  };
-  const labels: Record<ConnectionStatus, string> = {
-    connected: "Connected",
-    connecting: "Connecting...",
-    disconnected: "Disconnected",
-  };
+function DashboardInner() {
+  const { status, lastMessage, send } = useWebSocket();
+  const handleBridgeMessage = useBridgeHandler();
+  const registerWsSend = useRegisterWsSend();
+
+  // Route real WebSocket messages to the store
+  useEffect(() => {
+    if (lastMessage) {
+      handleBridgeMessage(lastMessage as ServerMessage);
+    }
+  }, [lastMessage, handleBridgeMessage]);
+
+  // Register WebSocket send function with store when connected
+  useEffect(() => {
+    if (status === 'connected') {
+      registerWsSend(send);
+    }
+  }, [status, send, registerWsSend]);
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        top: 8,
-        right: 12,
-        display: "flex",
-        alignItems: "center",
-        gap: 6,
-        zIndex: 1000,
-        fontFamily: "var(--font-family-mono)",
-        fontSize: 11,
-        color: "var(--color-text-muted)",
-      }}
-    >
-      <div
-        style={{
-          width: 7,
-          height: 7,
-          borderRadius: "50%",
-          background: colors[status],
-        }}
-      />
-      {labels[status]}
+    <div className="shell-outer">
+      <TopBar connectionStatus={status} />
+      <div className="shell-panels">
+        <ShellLayout />
+      </div>
+      <CommandPalette />
+      <PortfolioScoreboard />
+      <CrossProjectFlash />
     </div>
   );
 }
 
 export default function App() {
-  const { status } = useWebSocket();
-
   return (
-    <>
-      <StatusDot status={status} />
-      <ShellLayout />
-    </>
+    <DashboardProvider>
+      <DashboardInner />
+    </DashboardProvider>
   );
 }

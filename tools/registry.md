@@ -285,3 +285,9 @@ Zero hallucinations — only answers from what you uploaded.
 **Install:** see github.com/TCoder920x/open-legal-compliance-mcp
 **Verdict:** RESEARCHED — uses free/open government APIs for compliance. Most relevant for Mexico since SAT/CNBV have public APIs.
 **Use for:** [[agents/core/legal]] compliance checks, [[wiki/espacio-bosques]] regulatory monitoring
+
+### VoltAgent/awesome-design-md
+**Install:** Copy DESIGN.md from https://github.com/VoltAgent/awesome-design-md into project root
+**Verdict:** QUEUED — 66 production-extracted DESIGN.md files (Stripe, Linear, Supabase, Vercel, Apple, Coinbase, etc.)
+**Use for:** Any new project at design phase. Drop matching DESIGN.md into repo root, agent reads it for pixel-consistent UI generation. No tooling needed — plain markdown.
+**Best matches:** espacio-bosques → Coinbase/Revolut | lool-ai → Linear | longevite → Apple | nutria → Mintlify

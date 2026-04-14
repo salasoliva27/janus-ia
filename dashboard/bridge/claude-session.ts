@@ -1,9 +1,10 @@
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { spawn, type ChildProcess } from "node:child_process";
 import type { WebSocket } from "ws";
 import type { ServerMessage } from "./types.js";
-import { PermissionManager } from "./permissions.js";
 
-// T-01-06: Only allow cwd within workspace
+// Spawn Claude Code CLI using the user's subscription (not API key).
+// Uses `claude -p --output-format stream-json` for streaming responses.
+
 const WORKSPACE_ROOT = "/workspaces/venture-os";
 
 function isValidCwd(cwd: string): boolean {
@@ -11,104 +12,180 @@ function isValidCwd(cwd: string): boolean {
 }
 
 export class ClaudeSession {
-  private activeQuery: ReturnType<typeof query> | null = null;
+  private process: ChildProcess | null = null;
+  private sessionId: string | null = null;
 
   constructor(
     private ws: WebSocket,
-    private permissionManager: PermissionManager,
+    // Keep the interface compatible but we don't use permissionManager for CLI mode
+    _permissionManager: unknown,
   ) {}
 
   async start(prompt: string, cwd: string): Promise<void> {
-    // T-01-06: Validate cwd
     const safeCwd = isValidCwd(cwd) ? cwd : WORKSPACE_ROOT;
-
-    // Close any existing session first (T-01-05)
     this.close();
 
-    this.activeQuery = query({
-      prompt,
-      options: {
-        cwd: safeCwd,
-        permissionMode: "default",
-        includePartialMessages: true,
-        persistSession: true,
-        canUseTool: (toolName, input, opts) =>
-          this.permissionManager.request(
-            this.ws,
-            toolName,
-            input as Record<string, unknown>,
-            opts.toolUseID,
-          ),
-      },
+    const args = [
+      "-p", prompt,
+      "--output-format", "stream-json",
+      "--verbose",
+      // Disable hooks, skills, and session persistence for subprocess —
+      // hooks (GSD, claude-mem) cause interference and massive overhead
+      "--settings", '{"hooks":{}}',
+      "--disable-slash-commands",
+      "--no-session-persistence",
+    ];
+
+    // If we have a prior session, continue it
+    if (this.sessionId) {
+      args.push("--continue", this.sessionId);
+    }
+
+    console.log("[session] spawning claude CLI...");
+
+    // Strip ANTHROPIC_API_KEY so claude CLI uses OAuth subscription, not API key
+    const cleanEnv = { ...process.env };
+    delete cleanEnv.ANTHROPIC_API_KEY;
+
+    const proc = spawn("claude", args, {
+      cwd: safeCwd,
+      stdio: ["pipe", "pipe", "pipe"],
+      env: cleanEnv,
     });
 
-    try {
-      for await (const message of this.activeQuery) {
-        if (this.ws.readyState !== 1 /* OPEN */) break;
+    this.process = proc;
+    let buffer = "";
 
-        const outMsg: ServerMessage = { type: "claude_message", message };
+    proc.stdout?.on("data", (chunk: Buffer) => {
+      buffer += chunk.toString();
 
-        this.ws.send(JSON.stringify(outMsg));
+      // Process complete JSON lines
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || ""; // Keep incomplete last line in buffer
 
-        // Check for result message to send session_end
-        if (
-          typeof message === "object" &&
-          message !== null &&
-          "type" in message &&
-          (message as any).type === "result"
-        ) {
-          const resultMsg = message as any;
-          const endMsg: ServerMessage = {
-            type: "session_end",
-            cost: resultMsg.total_cost_usd,
-            usage: resultMsg.usage,
-          };
-          this.ws.send(JSON.stringify(endMsg));
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        try {
+          const event = JSON.parse(trimmed);
+          this.handleStreamEvent(event);
+        } catch {
+          // Not JSON — send as raw text
+          if (trimmed.length > 0) {
+            this.send({ type: "claude_message", message: trimmed });
+          }
         }
       }
-    } catch (err: any) {
-      const errMsg: ServerMessage = {
-        type: "error",
-        message: err?.message ?? "Unknown error",
-      };
-      if (this.ws.readyState === 1) {
-        this.ws.send(JSON.stringify(errMsg));
+    });
+
+    proc.stderr?.on("data", (chunk: Buffer) => {
+      const text = chunk.toString().trim();
+      if (text) {
+        console.log("[session:stderr]", text);
+      }
+    });
+
+    proc.on("close", (code) => {
+      console.log(`[session] process exited with code ${code}`);
+      this.process = null;
+      this.send({
+        type: "session_end",
+        cost: undefined,
+        usage: undefined,
+      });
+    });
+
+    proc.on("error", (err) => {
+      console.error("[session] spawn error:", err.message);
+      this.send({ type: "error", message: err.message });
+      this.process = null;
+    });
+  }
+
+  private handleStreamEvent(event: any): void {
+    // Claude CLI stream-json events:
+    // { type: "system", subtype: "init", session_id: "..." }
+    // { type: "assistant", message: { role: "assistant", content: [...] } }
+    // { type: "result", result: "...", session_id: "...", cost_usd: ... }
+
+    switch (event.type) {
+      case "system": {
+        if (event.session_id) {
+          this.sessionId = event.session_id;
+        }
+        // Don't forward system/hook events to chat
+        break;
+      }
+
+      case "assistant": {
+        // Extract text from content blocks
+        const content = event.message?.content;
+        if (Array.isArray(content)) {
+          for (const block of content) {
+            if (block.type === "text" && block.text) {
+              this.send({ type: "claude_message", message: block.text });
+            }
+          }
+        } else if (typeof content === "string") {
+          this.send({ type: "claude_message", message: content });
+        }
+        break;
+      }
+
+      case "result": {
+        // Session complete
+        if (event.session_id) {
+          this.sessionId = event.session_id;
+        }
+        // Extract final text if present
+        if (typeof event.result === "string" && event.result.length > 0) {
+          this.send({ type: "claude_message", message: event.result });
+        }
+        break;
+      }
+
+      default: {
+        // Forward tool_use, tool_result etc. as tool events
+        if (event.type === "tool_use" || event.tool_name) {
+          this.send({
+            type: "tool_event",
+            toolName: event.tool_name || event.name || "unknown",
+            input: event.input || {},
+            sessionId: this.sessionId || "",
+            timestamp: Date.now(),
+          });
+        }
+        break;
       }
     }
   }
 
   async followUp(prompt: string): Promise<void> {
-    if (!this.activeQuery) {
-      const errMsg: ServerMessage = {
-        type: "error",
-        message: "No active session to send follow-up to",
-      };
-      this.ws.send(JSON.stringify(errMsg));
-      return;
+    // For follow-ups, start a new session continuing the previous one
+    if (this.sessionId) {
+      await this.start(prompt, WORKSPACE_ROOT);
+    } else {
+      this.send({ type: "error", message: "No active session for follow-up" });
     }
-
-    await this.activeQuery.streamInput(
-      (async function* () {
-        yield {
-          type: "user" as const,
-          session_id: "",
-          message: { role: "user" as const, content: prompt },
-          parent_tool_use_id: null,
-        };
-      })(),
-    );
   }
 
   async interrupt(): Promise<void> {
-    if (this.activeQuery) {
-      await this.activeQuery.interrupt();
+    if (this.process) {
+      this.process.kill("SIGINT");
     }
   }
 
   close(): void {
-    if (this.activeQuery) {
-      this.activeQuery.close();
-      this.activeQuery = null;
+    if (this.process) {
+      this.process.kill("SIGTERM");
+      this.process = null;
+    }
+  }
+
+  private send(msg: ServerMessage): void {
+    if (this.ws.readyState === 1 /* OPEN */) {
+      this.ws.send(JSON.stringify(msg));
     }
   }
 }
