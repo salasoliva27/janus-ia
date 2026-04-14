@@ -67,10 +67,7 @@ Plans:
   3. Permission-gated tool calls show Approve/Deny buttons that resolve the call
   4. Chat history is scrollable and persists within the session
   5. User can type multiline input and send with Ctrl+Enter
-**Plans**: 2 plans
-Plans:
-- [ ] 03-01-PLAN.md — Chat types, state management, input component, ShellLayout wiring
-- [ ] 03-02-PLAN.md — Markdown rendering, tool call cards, permission prompts, visual verification
+**Plans**: TBD
 **UI hint**: yes
 
 ### Phase 4: System Graph
@@ -165,7 +162,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Foundation & Bridge Server | 0/3 | Not started | - |
 | 2. Shell Layout | 0/2 | Not started | - |
-| 3. Chat Panel | 0/2 | Not started | - |
+| 3. Chat Panel | 0/? | Not started | - |
 | 4. System Graph | 0/? | Not started | - |
 | 5. Activity Feed | 0/? | Not started | - |
 | 6. Workspace Panel | 0/? | Not started | - |
