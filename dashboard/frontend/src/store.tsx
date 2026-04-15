@@ -5,11 +5,11 @@ import type { ServerMessage } from './types/bridge';
 // ── Static Data (real project state, not simulated) ────────
 
 const PROJECTS: Project[] = [
-  { id: 'espacio-bosques', name: 'espacio-bosques', displayName: 'Espacio Bosques', stage: 'dev', stack: ['React', 'Solidity', 'Supabase', 'Bitso'], health: 'amber', currentPhase: 'i18n audit + fixes', phaseProgress: 0.65, lastCommit: { message: 'feat: bilingual sim-data, deposit modal i18n', hash: 'a1b2c3d', age: '5d' }, description: 'Real estate tokenization platform for Mexican developments', burn: 0, revenue: 0, legalFlags: ['LFPDPPP', 'Ley Fintech'], nextActions: ['Complete titleEs/summaryEs wiring', 'Provider registry Phase 2'], color: 'oklch(0.75 0.18 180)' },
-  { id: 'lool-ai', name: 'lool-ai', displayName: 'Lool AI', stage: 'dev', stack: ['Next.js', 'Supabase', 'Claude API'], health: 'green', currentPhase: 'API integration', phaseProgress: 0.4, lastCommit: { message: 'feat: Claude API wrapper + streaming', hash: 'e5f6g7h', age: '3d' }, description: 'AI-powered optical lab management for CDMX', burn: 0, revenue: 0, legalFlags: [], nextActions: ['Wire product catalog', 'Build order flow'], color: 'oklch(0.70 0.20 280)' },
-  { id: 'nutria', name: 'nutria', displayName: 'nutrIA', stage: 'dev', stack: ['React', 'Supabase', 'Claude API'], health: 'green', currentPhase: 'Memory system', phaseProgress: 0.8, lastCommit: { message: 'feat: persistent memory + profile extraction', hash: 'i9j0k1l', age: '12d' }, description: 'AI nutrition consultant with clinical intelligence', burn: 0, revenue: 0, legalFlags: [], nextActions: ['Dashboard redesign', 'Meal plan generation'], color: 'oklch(0.72 0.18 145)' },
-  { id: 'longevite', name: 'longevite', displayName: 'Longevite', stage: 'uat', stack: ['Next.js', 'Tailwind'], health: 'green', currentPhase: 'Deploy prep', phaseProgress: 0.9, lastCommit: { message: 'feat: V2 website rebuild complete', hash: 'm2n3o4p', age: '19d' }, description: 'Longevity therapeutics company website', burn: 0, revenue: 0, legalFlags: [], nextActions: ['Final QA', 'Push to prod'], color: 'oklch(0.68 0.15 50)' },
-  { id: 'freelance', name: 'freelance-system', displayName: 'Freelance System', stage: 'prod', stack: ['Node.js', 'React'], health: 'green', currentPhase: 'Maintenance', phaseProgress: 1.0, lastCommit: { message: 'chore: dependency updates', hash: 'q5r6s7t', age: '30d' }, description: 'Freelance project and invoice management', burn: 50, revenue: 800, legalFlags: [], nextActions: [], color: 'oklch(0.60 0.10 220)' },
+  { id: 'espacio-bosques', name: 'espacio-bosques', displayName: 'Espacio Bosques', stage: 'dev', stack: ['React', 'Solidity', 'Supabase', 'Bitso'], health: 'amber', currentPhase: 'i18n audit + fixes', phaseProgress: 0.65, lastCommit: { message: 'feat: bilingual sim-data, deposit modal i18n', hash: 'a1b2c3d', age: '5d' }, description: 'Real estate tokenization platform for Mexican developments', burn: 0, revenue: 0, legalFlags: ['LFPDPPP', 'Ley Fintech'], nextActions: ['Complete titleEs/summaryEs wiring', 'Provider registry Phase 2'], color: 'oklch(0.75 0.18 180)', repo: 'salasoliva27/espacio-bosques-dev' },
+  { id: 'lool-ai', name: 'lool-ai', displayName: 'Lool AI', stage: 'dev', stack: ['Next.js', 'Supabase', 'Claude API'], health: 'green', currentPhase: 'API integration', phaseProgress: 0.4, lastCommit: { message: 'feat: Claude API wrapper + streaming', hash: 'e5f6g7h', age: '3d' }, description: 'AI-powered optical lab management for CDMX', burn: 0, revenue: 0, legalFlags: [], nextActions: ['Wire product catalog', 'Build order flow'], color: 'oklch(0.70 0.20 280)', repo: 'salasoliva27/lool-ai' },
+  { id: 'nutria', name: 'nutria', displayName: 'nutrIA', stage: 'dev', stack: ['React', 'Supabase', 'Claude API'], health: 'green', currentPhase: 'Memory system', phaseProgress: 0.8, lastCommit: { message: 'feat: persistent memory + profile extraction', hash: 'i9j0k1l', age: '12d' }, description: 'AI nutrition consultant with clinical intelligence', burn: 0, revenue: 0, legalFlags: [], nextActions: ['Dashboard redesign', 'Meal plan generation'], color: 'oklch(0.72 0.18 145)', repo: 'salasoliva27/nutria-app' },
+  { id: 'longevite', name: 'longevite', displayName: 'Longevite', stage: 'uat', stack: ['Next.js', 'Tailwind'], health: 'green', currentPhase: 'Deploy prep', phaseProgress: 0.9, lastCommit: { message: 'feat: V2 website rebuild complete', hash: 'm2n3o4p', age: '19d' }, description: 'Longevity therapeutics company website', burn: 0, revenue: 0, legalFlags: [], nextActions: ['Final QA', 'Push to prod'], color: 'oklch(0.68 0.15 50)', repo: 'salasoliva27/LongeviteTherapeutics' },
+  { id: 'freelance', name: 'freelance-system', displayName: 'Freelance System', stage: 'prod', stack: ['Node.js', 'React'], health: 'green', currentPhase: 'Maintenance', phaseProgress: 1.0, lastCommit: { message: 'chore: dependency updates', hash: 'q5r6s7t', age: '30d' }, description: 'Freelance project and invoice management', burn: 50, revenue: 800, legalFlags: [], nextActions: [], color: 'oklch(0.60 0.10 220)', repo: 'salasoliva27/freelance-system' },
 ];
 
 // Tools with configuration status — needs-key tools will prompt user
@@ -685,12 +685,26 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     if (!content.trim()) return;
     const trimmed = content.trim();
 
-    // Add user message to chat
-    setState(s => ({
-      ...s,
-      chatMessages: [...s.chatMessages, { id: uid(), role: 'user', content: trimmed, timestamp: Date.now() }],
-      chatInput: '',
-    }));
+    // If editing, truncate from the edit point first, then add the new message
+    const editIdx = editingFromIdx.current;
+    editingFromIdx.current = null;
+
+    setState(s => {
+      const base = editIdx !== null ? s.chatMessages.slice(0, editIdx) : s.chatMessages;
+      return {
+        ...s,
+        chatMessages: [...base, { id: uid(), role: 'user', content: trimmed, timestamp: Date.now() }],
+        chatInput: '',
+        chatStatus: editIdx !== null ? 'idle' as const : s.chatStatus,
+        chatThinking: editIdx !== null ? false : s.chatThinking,
+        chatThinkingStart: editIdx !== null ? null : s.chatThinkingStart,
+      };
+    });
+
+    // Reset session when editing so next response starts fresh
+    if (editIdx !== null) {
+      hasActiveSession.current = false;
+    }
 
     // Detect credential input (e.g. BRAVE_API_KEY=sk-...) — these are for external MCPs, not Claude
     const keyMatch = trimmed.match(/^([\w_]+)\s*[=:]\s*(\S+)/);
@@ -757,18 +771,18 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  // Track which message is being edited — truncation happens on send, not on click
+  const editingFromIdx = useRef<number | null>(null);
+
   const editMessage = useCallback((messageId: string): string | null => {
     let editContent: string | null = null;
     setState(s => {
       const idx = s.chatMessages.findIndex(m => m.id === messageId);
       if (idx < 0 || s.chatMessages[idx].role !== 'user') return s;
       editContent = s.chatMessages[idx].content;
-      // Truncate everything from this message onward
-      const chatMessages = s.chatMessages.slice(0, idx);
-      return { ...s, chatMessages, chatStatus: 'idle', chatThinking: false, chatThinkingStart: null };
+      editingFromIdx.current = idx;
+      return s; // Don't mutate yet — wait for submit
     });
-    // Reset session so next send starts fresh context from truncated point
-    hasActiveSession.current = false;
     return editContent;
   }, []);
 

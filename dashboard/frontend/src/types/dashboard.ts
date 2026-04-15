@@ -16,6 +16,7 @@ export interface Project {
   legalFlags: string[];
   nextActions: string[];
   color: string;
+  repo?: string;
 }
 
 export interface AgentDispatch {

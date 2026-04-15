@@ -103,7 +103,16 @@ export function ProjectDrillDown() {
 
       {/* Quick actions */}
       <div className="drill-down__actions">
-        <button className="drill-down__action-btn">Open Repo</button>
+        {project.repo && (
+          <a
+            className="drill-down__action-btn"
+            href={`https://github.com/${project.repo}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Open Repo
+          </a>
+        )}
         <button className="drill-down__action-btn">Run Tests</button>
         {project.stage !== 'prod' && <button className="drill-down__action-btn">Deploy</button>}
       </div>
