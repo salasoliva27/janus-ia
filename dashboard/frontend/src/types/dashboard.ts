@@ -160,7 +160,7 @@ export interface DashboardState {
   chatStatus: 'idle' | 'thinking' | 'streaming' | 'done';
   chatThinkingStart: number | null;
   activeDocumentId: string | null;
-  rightPanelTab: 'memory' | 'documents';
+  rightPanelTab: 'memory' | 'documents' | 'editor';
 }
 
 export interface ChatMessage {
@@ -179,7 +179,7 @@ export interface DashboardActions {
   dismissNotification: (id: string) => void;
   addTerminalLine: (line: string) => void;
   setActiveDocument: (id: string | null) => void;
-  setRightPanelTab: (tab: 'memory' | 'documents') => void;
+  setRightPanelTab: (tab: 'memory' | 'documents' | 'editor') => void;
 }
 
 // White-label configuration

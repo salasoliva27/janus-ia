@@ -51,6 +51,65 @@ export function startServer(port: number): Promise<http.Server> {
     }
   });
 
+  // File API — read files for the editor
+  app.get("/api/file", (req, res) => {
+    const filePath = req.query.path as string;
+    if (!filePath || !filePath.startsWith("/workspaces/")) {
+      res.status(400).json({ error: "Invalid path" });
+      return;
+    }
+    try {
+      const content = fs.readFileSync(filePath, "utf-8");
+      const stat = fs.statSync(filePath);
+      res.json({ path: filePath, content, size: stat.size, modified: stat.mtimeMs });
+    } catch (err) {
+      res.status(404).json({ error: `File not found: ${filePath}` });
+    }
+  });
+
+  // File API — write files from the editor
+  app.post("/api/file", (req, res) => {
+    const { path: filePath, content } = req.body;
+    if (!filePath || typeof filePath !== "string" || !filePath.startsWith("/workspaces/")) {
+      res.status(400).json({ error: "Invalid path" });
+      return;
+    }
+    if (typeof content !== "string") {
+      res.status(400).json({ error: "Content must be a string" });
+      return;
+    }
+    try {
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, content, "utf-8");
+      res.json({ ok: true, path: filePath, size: content.length });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // File API — list directory
+  app.get("/api/files", (req, res) => {
+    const dirPath = (req.query.path as string) || "/workspaces/venture-os/dashboard/frontend/src";
+    if (!dirPath.startsWith("/workspaces/")) {
+      res.status(400).json({ error: "Invalid path" });
+      return;
+    }
+    try {
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+      const items = entries.map(e => ({
+        name: e.name,
+        path: path.join(dirPath, e.name),
+        isDir: e.isDirectory(),
+      })).sort((a, b) => {
+        if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+      res.json({ path: dirPath, items });
+    } catch {
+      res.status(404).json({ error: "Directory not found" });
+    }
+  });
+
   // Hook receiver — broadcasts tool events to all WS clients
   app.post("/hooks/post-tool-use", (req, res) => {
     const { tool_name, tool_input, session_id } = req.body;

@@ -364,11 +364,13 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       case 'claude_message': {
         // Claude session output — only show readable text, filter out system/hook JSON
         const raw = msg.message;
+        let displayed = false;
         if (typeof raw === 'string') {
-          // Skip raw JSON blobs (hook events, system messages)
           const trimmed = raw.trim();
-          if (trimmed.startsWith('{') || trimmed.startsWith('<command') || trimmed.startsWith('<objective') || trimmed.startsWith('<execution') || trimmed.startsWith('<process')) break;
-          if (trimmed.length > 0 && trimmed.length < 2000) {
+          // Skip raw JSON blobs, XML-like system tags
+          const isSystem = trimmed.startsWith('{') || trimmed.startsWith('<command') || trimmed.startsWith('<objective') || trimmed.startsWith('<execution') || trimmed.startsWith('<process');
+          if (!isSystem && trimmed.length > 0) {
+            displayed = true;
             setState(s => ({
               ...s,
               chatThinking: false,
@@ -377,18 +379,23 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             }));
           }
         } else if (raw && typeof raw === 'object') {
-          // Structured message — extract text content if present
           const obj = raw as Record<string, unknown>;
-          if (obj.type === 'system' || obj.type === 'result' || obj.subtype === 'hook_started') break;
-          const text = (obj.content as string) || (obj.text as string);
-          if (text && typeof text === 'string' && text.length < 2000 && !text.startsWith('{')) {
-            setState(s => ({
-              ...s,
-              chatThinking: false,
-              chatStatus: 'streaming',
-              chatMessages: [...s.chatMessages, { id: uid(), role: 'assistant', content: text, timestamp: Date.now() }],
-            }));
+          if (obj.type !== 'system' && obj.type !== 'result' && obj.subtype !== 'hook_started') {
+            const text = (obj.content as string) || (obj.text as string);
+            if (text && typeof text === 'string' && !text.startsWith('{')) {
+              displayed = true;
+              setState(s => ({
+                ...s,
+                chatThinking: false,
+                chatStatus: 'streaming',
+                chatMessages: [...s.chatMessages, { id: uid(), role: 'assistant', content: text, timestamp: Date.now() }],
+              }));
+            }
           }
+        }
+        // Even if message was filtered, clear thinking state — Claude is responding
+        if (!displayed) {
+          setState(s => s.chatThinking ? { ...s, chatThinking: false, chatStatus: 'streaming' } : s);
         }
         break;
       }
@@ -421,6 +428,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       case 'error': {
         setState(s => ({
           ...s,
+          chatThinking: false,
+          chatStatus: 'idle',
+          chatThinkingStart: null,
           terminalLines: [...s.terminalLines, `[error] ${msg.message}`].slice(-100),
         }));
         break;
@@ -458,7 +468,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const dismissNotification = useCallback((id: string) => setState(s => ({ ...s, notifications: s.notifications.map(n => n.id === id ? { ...n, read: true } : n) })), []);
   const addTerminalLine = useCallback((line: string) => setState(s => ({ ...s, terminalLines: [...s.terminalLines, line].slice(-100) })), []);
   const setActiveDocument = useCallback((id: string | null) => setState(s => ({ ...s, activeDocumentId: id })), []);
-  const setRightPanelTab = useCallback((tab: 'memory' | 'documents') => setState(s => ({ ...s, rightPanelTab: tab })), []);
+  const setRightPanelTab = useCallback((tab: 'memory' | 'documents' | 'editor') => setState(s => ({ ...s, rightPanelTab: tab })), []);
 
   // Listen for keyboard shortcut custom events
   useEffect(() => {

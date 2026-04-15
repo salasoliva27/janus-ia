@@ -2,9 +2,6 @@ import { spawn, type ChildProcess } from "node:child_process";
 import type { WebSocket } from "ws";
 import type { ServerMessage } from "./types.js";
 
-// Spawn Claude Code CLI using the user's subscription (not API key).
-// Uses `claude -p --output-format stream-json` for streaming responses.
-
 const WORKSPACE_ROOT = "/workspaces/venture-os";
 
 function isValidCwd(cwd: string): boolean {
@@ -14,10 +11,10 @@ function isValidCwd(cwd: string): boolean {
 export class ClaudeSession {
   private process: ChildProcess | null = null;
   private sessionId: string | null = null;
+  private timeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private ws: WebSocket,
-    // Keep the interface compatible but we don't use permissionManager for CLI mode
     _permissionManager: unknown,
   ) {}
 
@@ -29,29 +26,24 @@ export class ClaudeSession {
       "-p", prompt,
       "--output-format", "stream-json",
       "--verbose",
-      // Skip permissions so tools execute in non-interactive -p mode
-      // (without this, tool calls silently fail and session ends early)
       "--dangerously-skip-permissions",
       "--disable-slash-commands",
-      "--no-session-persistence",
     ];
 
-    // If we have a prior session, continue it
+    // Continue previous session if we have one
     if (this.sessionId) {
       args.push("--continue", this.sessionId);
     }
 
     console.log("[session] spawning claude CLI...");
 
-    // Strip ANTHROPIC_API_KEY so claude CLI uses OAuth subscription, not API key
+    // Strip ANTHROPIC_API_KEY so claude CLI uses OAuth subscription
     const cleanEnv = { ...process.env };
-    const hadApiKey = !!cleanEnv.ANTHROPIC_API_KEY;
     delete cleanEnv.ANTHROPIC_API_KEY;
 
-    // Notify UI that session is starting with auth method
     this.send({
       type: "session_start",
-      auth: hadApiKey ? "subscription" : "subscription", // always subscription — we stripped the key
+      auth: "subscription",
     });
 
     const proc = spawn("claude", args, {
@@ -62,13 +54,18 @@ export class ClaudeSession {
 
     this.process = proc;
     let buffer = "";
+    let gotOutput = false;
+
+    // Safety timeout — if no output for 120s, kill the process
+    this.resetTimeout(proc);
 
     proc.stdout?.on("data", (chunk: Buffer) => {
+      gotOutput = true;
+      this.resetTimeout(proc);
       buffer += chunk.toString();
 
-      // Process complete JSON lines
       const lines = buffer.split("\n");
-      buffer = lines.pop() || ""; // Keep incomplete last line in buffer
+      buffer = lines.pop() || "";
 
       for (const line of lines) {
         const trimmed = line.trim();
@@ -78,7 +75,6 @@ export class ClaudeSession {
           const event = JSON.parse(trimmed);
           this.handleStreamEvent(event);
         } catch {
-          // Not JSON — send as raw text
           if (trimmed.length > 0) {
             this.send({ type: "claude_message", message: trimmed });
           }
@@ -90,12 +86,31 @@ export class ClaudeSession {
       const text = chunk.toString().trim();
       if (text) {
         console.log("[session:stderr]", text);
+        // Forward meaningful errors to UI
+        if (text.includes("error") || text.includes("Error") || text.includes("failed")) {
+          this.send({ type: "error", message: text });
+        }
       }
     });
 
     proc.on("close", (code) => {
       console.log(`[session] process exited with code ${code}`);
+      this.clearTimeout();
       this.process = null;
+
+      // Process remaining buffer
+      if (buffer.trim()) {
+        try {
+          const event = JSON.parse(buffer.trim());
+          this.handleStreamEvent(event);
+        } catch {
+          if (buffer.trim().length > 0) {
+            this.send({ type: "claude_message", message: buffer.trim() });
+          }
+        }
+        buffer = "";
+      }
+
       this.send({
         type: "session_end",
         cost: undefined,
@@ -105,35 +120,45 @@ export class ClaudeSession {
 
     proc.on("error", (err) => {
       console.error("[session] spawn error:", err.message);
+      this.clearTimeout();
       this.send({ type: "error", message: err.message });
       this.process = null;
     });
   }
 
-  private handleStreamEvent(event: any): void {
-    // Claude CLI stream-json events:
-    // { type: "system", subtype: "init", session_id: "..." }
-    // { type: "assistant", message: { role: "assistant", content: [...] } }
-    // { type: "result", result: "...", session_id: "...", cost_usd: ... }
+  private resetTimeout(proc: ChildProcess) {
+    this.clearTimeout();
+    this.timeout = setTimeout(() => {
+      console.warn("[session] timeout — no output for 120s, killing process");
+      proc.kill("SIGTERM");
+      this.send({ type: "error", message: "Session timed out (no output for 120s)" });
+    }, 120_000);
+  }
 
+  private clearTimeout() {
+    if (this.timeout) {
+      clearTimeout(this.timeout);
+      this.timeout = null;
+    }
+  }
+
+  private handleStreamEvent(event: any): void {
     switch (event.type) {
       case "system": {
         if (event.session_id) {
           this.sessionId = event.session_id;
+          console.log("[session] id:", this.sessionId);
         }
-        // Don't forward system/hook events to chat
         break;
       }
 
       case "assistant": {
-        // Extract text and tool_use from content blocks
         const content = event.message?.content;
         if (Array.isArray(content)) {
           for (const block of content) {
             if (block.type === "text" && block.text) {
               this.send({ type: "claude_message", message: block.text });
             } else if (block.type === "tool_use") {
-              // Forward tool_use blocks so frontend can detect file operations
               this.send({
                 type: "tool_event",
                 toolName: block.name || "unknown",
@@ -150,8 +175,6 @@ export class ClaudeSession {
       }
 
       case "result": {
-        // Session complete — text already sent via "assistant" events above,
-        // so do NOT re-send event.result (causes duplicate messages).
         if (event.session_id) {
           this.sessionId = event.session_id;
         }
@@ -159,7 +182,6 @@ export class ClaudeSession {
       }
 
       default: {
-        // Forward tool_use, tool_result etc. as tool events
         if (event.type === "tool_use" || event.tool_name) {
           this.send({
             type: "tool_event",
@@ -175,11 +197,11 @@ export class ClaudeSession {
   }
 
   async followUp(prompt: string): Promise<void> {
-    // For follow-ups, start a new session continuing the previous one
     if (this.sessionId) {
       await this.start(prompt, WORKSPACE_ROOT);
     } else {
-      this.send({ type: "error", message: "No active session for follow-up" });
+      // No prior session — start fresh
+      await this.start(prompt, WORKSPACE_ROOT);
     }
   }
 
@@ -190,6 +212,7 @@ export class ClaudeSession {
   }
 
   close(): void {
+    this.clearTimeout();
     if (this.process) {
       this.process.kill("SIGTERM");
       this.process = null;
