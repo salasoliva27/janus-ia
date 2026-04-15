@@ -241,6 +241,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     chatInput: '',
     chatThinking: false,
     chatAuth: null,
+    chatStatus: 'idle',
+    chatThinkingStart: null,
     activeDocumentId: null,
     rightPanelTab: 'memory',
   });
@@ -353,6 +355,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           ...s,
           chatThinking: true,
           chatAuth: (msg as any).auth || 'unknown',
+          chatStatus: 'thinking',
+          chatThinkingStart: Date.now(),
         }));
         break;
       }
@@ -368,6 +372,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             setState(s => ({
               ...s,
               chatThinking: false,
+              chatStatus: 'streaming',
               chatMessages: [...s.chatMessages, { id: uid(), role: 'assistant', content: trimmed, timestamp: Date.now() }],
             }));
           }
@@ -380,6 +385,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             setState(s => ({
               ...s,
               chatThinking: false,
+              chatStatus: 'streaming',
               chatMessages: [...s.chatMessages, { id: uid(), role: 'assistant', content: text, timestamp: Date.now() }],
             }));
           }
@@ -402,11 +408,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
       case 'session_end': {
         hasActiveSession.current = false;
-        // Don't clutter chat with "Session ended" — it's a -p mode artifact.
-        // The session auto-continues via --continue on next message.
         setState(s => ({
           ...s,
           chatThinking: false,
+          chatStatus: 'done',
+          chatThinkingStart: null,
           terminalLines: [...s.terminalLines, '[session] turn complete'].slice(-100),
         }));
         break;
@@ -515,7 +521,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    setState(s => ({ ...s, chatThinking: true }));
+    setState(s => ({ ...s, chatThinking: true, chatStatus: 'thinking', chatThinkingStart: Date.now() }));
 
     if (!hasActiveSession.current) {
       // Start a new Claude session

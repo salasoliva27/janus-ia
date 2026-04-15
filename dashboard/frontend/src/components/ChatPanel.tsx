@@ -6,7 +6,6 @@ import type { ChatMessage } from '../types/dashboard';
 
 function ToolCallCard({ content }: { content: string }) {
   const [expanded, setExpanded] = useState(false);
-  // Parse "Permission needed: ToolName\nInput: {...}"
   const lines = content.split('\n');
   const toolLine = lines[0]?.replace('Permission needed: ', '') || 'Tool Call';
   const inputLine = lines.slice(1).join('\n');
@@ -29,7 +28,6 @@ function ToolCallCard({ content }: { content: string }) {
 
 function MessageContent({ msg }: { msg: ChatMessage }) {
   if (msg.role === 'system') {
-    // Check if it's a permission/tool call
     if (msg.content.startsWith('Permission needed:')) {
       return <ToolCallCard content={msg.content} />;
     }
@@ -40,7 +38,6 @@ function MessageContent({ msg }: { msg: ChatMessage }) {
     return <span>{msg.content}</span>;
   }
 
-  // Assistant messages get full markdown rendering
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -71,9 +68,33 @@ function MessageContent({ msg }: { msg: ChatMessage }) {
   );
 }
 
+function ElapsedTimer({ start }: { start: number }) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    setElapsed(Math.floor((Date.now() - start) / 1000));
+    const interval = setInterval(() => {
+      setElapsed(Math.floor((Date.now() - start) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [start]);
+
+  if (elapsed < 1) return null;
+  const m = Math.floor(elapsed / 60);
+  const s = elapsed % 60;
+  return <span>{m > 0 ? `${m}m ${s}s` : `${s}s`}</span>;
+}
+
+const STATUS_CONFIG = {
+  idle: { label: 'ready', color: 'var(--color-text-muted)', dot: 'var(--color-text-muted)' },
+  thinking: { label: 'thinking', color: 'var(--color-accent)', dot: 'var(--color-accent)' },
+  streaming: { label: 'responding', color: 'oklch(0.72 0.18 145)', dot: 'oklch(0.72 0.18 145)' },
+  done: { label: 'done', color: 'var(--color-text-muted)', dot: 'oklch(0.72 0.18 145)' },
+};
+
 export function ChatPanel() {
   const dashboard = useDashboard();
-  const { chatMessages, chatThinking, chatAuth, agents, sendChatMessage } = dashboard;
+  const { chatMessages, chatThinking, chatAuth, chatStatus, chatThinkingStart, agents, sendChatMessage } = dashboard;
   const [input, setInput] = useState('');
   const [showAgents, setShowAgents] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -97,6 +118,7 @@ export function ChatPanel() {
   }
 
   const recentAgents = agents.slice(0, 6);
+  const cfg = STATUS_CONFIG[chatStatus] || STATUS_CONFIG.idle;
 
   return (
     <div className="chat-panel">
@@ -121,13 +143,22 @@ export function ChatPanel() {
             <MessageContent msg={msg} />
           </div>
         ))}
+
+        {/* Thinking indicator — prominent */}
         {chatThinking && (
-          <div className="chat-panel__thinking">
-            <span className="chat-panel__thinking-dot" />
-            <span className="chat-panel__thinking-dot" />
-            <span className="chat-panel__thinking-dot" />
+          <div className="chat-panel__thinking-bar">
+            <div className="chat-panel__thinking-pulse" />
+            <span className="chat-panel__thinking-label">
+              thinking
+              {chatThinkingStart && (
+                <>
+                  {' '}<ElapsedTimer start={chatThinkingStart} />
+                </>
+              )}
+            </span>
           </div>
         )}
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -154,17 +185,31 @@ export function ChatPanel() {
         </div>
       )}
 
-      {/* Input */}
-      <form className="chat-panel__input-area" onSubmit={handleSubmit}>
-        <textarea
-          className="chat-panel__input"
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Ask anything... (add skill, paste key, build project)"
-          rows={2}
-        />
-      </form>
+      {/* Status bar + Input */}
+      <div className="chat-panel__input-area">
+        <div className="chat-panel__status-bar">
+          <span
+            className={`chat-panel__status-dot ${chatStatus === 'thinking' ? 'chat-panel__status-dot--pulse' : ''}`}
+            style={{ background: cfg.dot }}
+          />
+          <span className="chat-panel__status-label" style={{ color: cfg.color }}>
+            {cfg.label}
+            {chatStatus === 'thinking' && chatThinkingStart && (
+              <> — <ElapsedTimer start={chatThinkingStart} /></>
+            )}
+          </span>
+        </div>
+        <form onSubmit={handleSubmit} style={{ display: 'contents' }}>
+          <textarea
+            className="chat-panel__input"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask anything... (add skill, paste key, build project)"
+            rows={2}
+          />
+        </form>
+      </div>
     </div>
   );
 }

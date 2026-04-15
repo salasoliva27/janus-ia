@@ -157,6 +157,8 @@ export interface DashboardState {
   chatInput: string;
   chatThinking: boolean;
   chatAuth: string | null;
+  chatStatus: 'idle' | 'thinking' | 'streaming' | 'done';
+  chatThinkingStart: number | null;
   activeDocumentId: string | null;
   rightPanelTab: 'memory' | 'documents';
 }
