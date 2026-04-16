@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { ShellLayout } from './components/ShellLayout';
+import { WindowShell } from './components/WindowShell';
+import { WindowManagerProvider } from './store/window-store';
 import { TopBar } from './components/TopBar';
 import { CommandPalette } from './components/CommandPalette';
 import { PortfolioScoreboard } from './components/PortfolioScoreboard';
@@ -77,7 +78,9 @@ function DashboardInner() {
     <div className="shell-outer">
       <TopBar connectionStatus={status} onThemeToggle={() => setThemeOpen(true)} lastMessage={lastMessage} />
       <div className="shell-panels">
-        <ShellLayout />
+        <WindowManagerProvider>
+          <WindowShell />
+        </WindowManagerProvider>
       </div>
       <CommandPalette />
       <PortfolioScoreboard />

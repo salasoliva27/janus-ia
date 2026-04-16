@@ -92,9 +92,15 @@ const STATUS_CONFIG = {
   done: { label: 'done', color: 'var(--color-text-muted)', dot: 'oklch(0.72 0.18 145)' },
 };
 
-export function ChatPanel() {
+interface ChatPanelProps {
+  sessionId?: string;
+  lineageLabel?: string;
+  lineageColor?: string;
+}
+
+export function ChatPanel({ sessionId = 'session-0', lineageLabel, lineageColor }: ChatPanelProps) {
   const dashboard = useDashboard();
-  const { chatMessages, chatThinking, chatAuth, chatStatus, chatThinkingStart, sendChatMessage, stopResponse, editMessage } = dashboard;
+  const { chatMessages, chatThinking, chatAuth, chatStatus, chatThinkingStart, sendChatMessage, stopResponse, editMessage, forkChat } = dashboard;
   const [input, setInput] = useState('');
   const [hoveredMsgId, setHoveredMsgId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -147,8 +153,27 @@ export function ChatPanel() {
     <div className="chat-panel">
       {/* Header */}
       <div className="chat-panel__header">
-        <span>Venture OS{chatAuth ? <span className="chat-panel__auth-badge">{chatAuth}</span> : null}</span>
-        <div style={{ position: 'relative' }}>
+        <span>
+          {lineageLabel
+            ? <><span className="chat-panel__lineage" style={{ color: lineageColor }}>{lineageLabel}</span></>
+            : <>Venture OS{chatAuth ? <span className="chat-panel__auth-badge">{chatAuth}</span> : null}</>
+          }
+        </span>
+        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+          <button
+            className={`chat-panel__fork-btn ${isBusy ? 'chat-panel__fork-btn--disabled' : ''}`}
+            onClick={() => !isBusy && forkChat(sessionId, `Fork ${Date.now().toString(36).slice(-4)}`)}
+            title="Fork conversation into new window"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="18" cy="18" r="3" />
+              <circle cx="6" cy="6" r="3" />
+              <circle cx="18" cy="6" r="3" />
+              <path d="M6 9v6c0 1.657 1.343 3 3 3h3" />
+              <line x1="18" y1="9" x2="18" y2="15" />
+            </svg>
+            <span>Fork</span>
+          </button>
           <button
             className={`chat-panel__learn-btn ${isBusy ? 'chat-panel__learn-btn--disabled' : ''}`}
             onClick={() => !isBusy && setLearnOpen(v => !v)}

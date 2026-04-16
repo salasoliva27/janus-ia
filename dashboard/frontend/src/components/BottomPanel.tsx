@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { useDashboard } from '../store';
+import { CalendarPanel } from './CalendarPanel';
 
-type Tab = 'timeline' | 'capacity' | 'learnings' | 'terminal' | 'workspace';
+type Tab = 'timeline' | 'calendar' | 'learnings' | 'terminal' | 'workspace';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'timeline', label: 'Timeline' },
-  { id: 'capacity', label: 'Capacity' },
+  { id: 'calendar', label: 'Calendar' },
   { id: 'learnings', label: 'Learnings' },
   { id: 'terminal', label: 'Terminal' },
   { id: 'workspace', label: 'Workspace' },
@@ -308,7 +309,7 @@ export function BottomPanel() {
 
   const content: Record<Tab, React.ReactNode> = {
     timeline: <SessionTimeline />,
-    capacity: <CapacityHeatmap />,
+    calendar: <CalendarPanel />,
     learnings: <LearningFeed />,
     terminal: <TerminalPreview />,
     workspace: <WorkspacePreview />,

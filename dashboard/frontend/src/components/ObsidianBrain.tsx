@@ -372,13 +372,13 @@ export function ObsidianBrain() {
         onWheel={handleWheel}
       />
       <div className="constellation__view-toggle">
-        {(['constellation', 'brain', 'files'] as const).map(v => (
+        {(['constellation', 'brain', 'procedures', 'files'] as const).map(v => (
           <button
             key={v}
             className={`constellation__view-btn ${centerView === v ? 'constellation__view-btn--active' : ''}`}
             onClick={() => setCenterView(v)}
           >
-            {v === 'files' ? 'Activity' : v === 'constellation' ? 'Projects' : v.charAt(0).toUpperCase() + v.slice(1)}
+            {v === 'files' ? 'Activity' : v === 'constellation' ? 'Projects' : v === 'procedures' ? 'Procedures' : v.charAt(0).toUpperCase() + v.slice(1)}
           </button>
         ))}
       </div>

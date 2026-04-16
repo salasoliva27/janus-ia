@@ -1,7 +1,5 @@
-import { useRef } from 'react';
-import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelHandle } from 'react-resizable-panels';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useDashboard } from '../store';
-import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { ChatPanel } from './ChatPanel';
 import { Constellation } from './Constellation';
 import { ObsidianBrain } from './ObsidianBrain';
@@ -11,13 +9,9 @@ import { ToolPulseBar } from './ToolPulseBar';
 import { BottomPanel } from './BottomPanel';
 import './ShellLayout.css';
 
+/** @deprecated Use WindowShell instead */
 export function ShellLayout() {
-  const chatPanel = useRef<ImperativePanelHandle>(null);
-  const bottomPanel = useRef<ImperativePanelHandle>(null);
-  const contextPanel = useRef<ImperativePanelHandle>(null);
   const { centerView } = useDashboard();
-
-  useKeyboardShortcuts({ chatPanel, bottomPanel, workspacePanel: contextPanel });
 
   const centerContent = centerView === 'brain' ? <ObsidianBrain />
     : centerView === 'files' ? <FileHeatmapView />
@@ -30,7 +24,7 @@ export function ShellLayout() {
       style={{ width: '100%', height: '100%' }}
     >
       {/* Left: Chat + Agent Stream */}
-      <Panel ref={chatPanel} defaultSize={22} minSize={15} collapsible collapsedSize={0}>
+      <Panel defaultSize={22} minSize={15} collapsible collapsedSize={0}>
         <ChatPanel />
       </Panel>
 
@@ -52,7 +46,7 @@ export function ShellLayout() {
           <PanelResizeHandle className="resize-handle resize-handle--horizontal" />
 
           {/* Bottom panel with tabs */}
-          <Panel ref={bottomPanel} defaultSize={35} minSize={15} collapsible collapsedSize={0}>
+          <Panel defaultSize={35} minSize={15} collapsible collapsedSize={0}>
             <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
               <ToolPulseBar />
               <div style={{ flex: 1, minHeight: 0 }}>
@@ -66,7 +60,7 @@ export function ShellLayout() {
       <PanelResizeHandle className="resize-handle resize-handle--vertical" />
 
       {/* Right: Memory / Documents / Project Drill-Down */}
-      <Panel ref={contextPanel} defaultSize={30} minSize={15} collapsible collapsedSize={0}>
+      <Panel defaultSize={30} minSize={15} collapsible collapsedSize={0}>
         <RightPanel />
       </Panel>
     </PanelGroup>

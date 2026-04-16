@@ -526,6 +526,29 @@
 }
 .chat-panel__learn-btn:hover { background: oklch(0.25 0.04 180 / 0.5); }
 .chat-panel__learn-btn--disabled { opacity: 0.4; cursor: not-allowed; }
+
+.chat-panel__fork-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: oklch(0.20 0.02 280 / 0.4);
+  border: 1px solid oklch(0.30 0.04 280 / 0.4);
+  color: oklch(0.72 0.18 280);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-family: var(--font-family-mono);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.chat-panel__fork-btn:hover { background: oklch(0.25 0.04 280 / 0.5); }
+.chat-panel__fork-btn--disabled { opacity: 0.4; cursor: not-allowed; }
+
+.chat-panel__lineage {
+  font-family: var(--font-family-mono);
+  font-size: 10px;
+  font-weight: 600;
+}
 .chat-panel__learn-menu {
   position: absolute;
   top: 100%;

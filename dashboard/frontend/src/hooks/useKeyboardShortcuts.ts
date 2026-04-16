@@ -1,25 +1,9 @@
-import { useEffect, useContext } from 'react';
-import type { ImperativePanelHandle } from 'react-resizable-panels';
+import { useEffect } from 'react';
+import { useWindowManager } from '../store/window-store';
 
-// Import store actions without circular dep — we access via context in parent
-// This hook just handles panel toggling + global shortcuts
+export function useKeyboardShortcuts() {
+  const { dispatch } = useWindowManager();
 
-interface PanelRefs {
-  chatPanel: React.RefObject<ImperativePanelHandle | null>;
-  bottomPanel: React.RefObject<ImperativePanelHandle | null>;
-  workspacePanel: React.RefObject<ImperativePanelHandle | null>;
-}
-
-function togglePanel(panel: ImperativePanelHandle | null, expandSize = 25) {
-  if (!panel) return;
-  if (panel.isCollapsed()) {
-    panel.expand(expandSize);
-  } else {
-    panel.collapse();
-  }
-}
-
-export function useKeyboardShortcuts(refs: PanelRefs) {
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       const mod = e.metaKey || e.ctrlKey;
@@ -28,19 +12,18 @@ export function useKeyboardShortcuts(refs: PanelRefs) {
       switch (e.key) {
         case 'b':
           e.preventDefault();
-          togglePanel(refs.chatPanel.current, 22);
+          dispatch({ type: 'TOGGLE_MINIMIZE', id: 'win-chat' });
           break;
         case 'j':
           e.preventDefault();
-          togglePanel(refs.bottomPanel.current, 35);
+          dispatch({ type: 'TOGGLE_MINIMIZE', id: 'win-bottom' });
           break;
         case '\\':
           e.preventDefault();
-          togglePanel(refs.workspacePanel.current, 30);
+          dispatch({ type: 'TOGGLE_MINIMIZE', id: 'win-right' });
           break;
         case 'k':
           e.preventDefault();
-          // Dispatch custom event — picked up by App
           window.dispatchEvent(new CustomEvent('venture-os:toggle-palette'));
           break;
         case 'p':
@@ -54,5 +37,5 @@ export function useKeyboardShortcuts(refs: PanelRefs) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [refs]);
+  }, [dispatch]);
 }

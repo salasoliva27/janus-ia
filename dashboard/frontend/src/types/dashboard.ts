@@ -141,7 +141,7 @@ export interface FileActivity {
   changes: number;
 }
 
-export type CenterView = 'constellation' | 'brain' | 'files';
+export type CenterView = 'constellation' | 'brain' | 'procedures' | 'files';
 
 export interface Document {
   id: string;
@@ -205,6 +205,7 @@ export interface DashboardActions {
   addTerminalLine: (line: string) => void;
   setActiveDocument: (id: string | null) => void;
   setRightPanelTab: (tab: 'memory' | 'documents' | 'editor') => void;
+  forkChat: (parentSessionId: string, label: string) => string;
 }
 
 // White-label configuration

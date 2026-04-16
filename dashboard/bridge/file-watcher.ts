@@ -5,26 +5,26 @@ import * as os from "node:os";
 import type { ServerMessage } from "./types.js";
 
 const VAULT_PATHS = [
-  "/workspaces/venture-os/concepts/**/*.md",
-  "/workspaces/venture-os/learnings/**/*.md",
-  "/workspaces/venture-os/wiki/**/*.md",
+  "/workspaces/janus-ia/concepts/**/*.md",
+  "/workspaces/janus-ia/learnings/**/*.md",
+  "/workspaces/janus-ia/wiki/**/*.md",
 ];
 
 const PROJECT_PATHS = [
-  "/workspaces/venture-os/projects/**/*.md",
-  "/workspaces/venture-os/agents/**/*.md",
+  "/workspaces/janus-ia/projects/**/*.md",
+  "/workspaces/janus-ia/agents/**/*.md",
 ];
 
 const DASHBOARD_PATHS = [
-  "/workspaces/venture-os/dashboard/frontend/src/**/*.{tsx,ts,css}",
-  "/workspaces/venture-os/dashboard/bridge/**/*.ts",
+  "/workspaces/janus-ia/dashboard/frontend/src/**/*.{tsx,ts,css}",
+  "/workspaces/janus-ia/dashboard/bridge/**/*.ts",
 ];
 
 const MEMORY_DIR = path.join(
   os.homedir(),
   ".claude",
   "projects",
-  "-workspaces-venture-os",
+  "-workspaces-janus-ia",
   "memory"
 );
 
@@ -149,7 +149,7 @@ export function broadcastInitialLearnings(broadcast: (msg: ServerMessage) => voi
   }
 
   // Scan vault learnings
-  const learningsDir = "/workspaces/venture-os/learnings";
+  const learningsDir = "/workspaces/janus-ia/learnings";
   if (fs.existsSync(learningsDir)) {
     for (const f of fs.readdirSync(learningsDir)) {
       if (!f.endsWith(".md")) continue;
@@ -159,7 +159,7 @@ export function broadcastInitialLearnings(broadcast: (msg: ServerMessage) => voi
   }
 
   // Scan vault concepts
-  const conceptsDir = "/workspaces/venture-os/concepts";
+  const conceptsDir = "/workspaces/janus-ia/concepts";
   if (fs.existsSync(conceptsDir)) {
     for (const f of fs.readdirSync(conceptsDir)) {
       if (!f.endsWith(".md")) continue;

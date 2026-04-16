@@ -744,22 +744,51 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    // Message interruption: if agent is mid-response, interrupt and re-inject
+    const currentStatus = state.chatStatus;
+    if (currentStatus === 'thinking' || currentStatus === 'streaming') {
+      // Interrupt current generation
+      send({ type: 'interrupt', sessionId: 'session-0' });
+
+      // Add system indicator
+      setState(s => ({
+        ...s,
+        chatMessages: [...s.chatMessages, {
+          id: uid(), role: 'system',
+          content: 'Incorporating your message...',
+          timestamp: Date.now(),
+        }],
+      }));
+
+      // Re-send with injected context after brief delay for interrupt to land
+      setTimeout(() => {
+        send({
+          type: 'follow_up',
+          prompt: `[User interrupted with additional context: ${trimmed}]\n\nPlease incorporate the above into your response and continue.`,
+          sessionId: 'session-0',
+        });
+      }, 300);
+
+      setState(s => ({ ...s, chatThinking: true, chatStatus: 'thinking', chatThinkingStart: Date.now() }));
+      return;
+    }
+
     setState(s => ({ ...s, chatThinking: true, chatStatus: 'thinking', chatThinkingStart: Date.now() }));
 
     if (!hasActiveSession.current) {
       // Start a new Claude session
-      send({ type: 'start', prompt: trimmed, cwd: '/workspaces/venture-os' });
+      send({ type: 'start', prompt: trimmed, cwd: '/workspaces/janus-ia', sessionId: 'session-0' });
       hasActiveSession.current = true;
     } else {
       // Follow up on existing session
-      send({ type: 'follow_up', prompt: trimmed });
+      send({ type: 'follow_up', prompt: trimmed, sessionId: 'session-0' });
     }
   }, []);
 
   const stopResponse = useCallback(() => {
     const send = wsSendRef.current;
     if (send) {
-      send({ type: 'interrupt' });
+      send({ type: 'interrupt', sessionId: 'session-0' });
     }
     hasActiveSession.current = false;
     setState(s => ({
@@ -786,7 +815,32 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     return editContent;
   }, []);
 
-  const actions: DashboardActions = { selectProject, selectBrainNode, setCenterView, toggleCommandPalette, toggleScoreboard, sendChatMessage, stopResponse, editMessage, dismissNotification, addTerminalLine, setActiveDocument, setRightPanelTab };
+  const forkChat = useCallback((parentSessionId: string, label: string): string => {
+    const newSessionId = `session-${Date.now()}`;
+    const send = wsSendRef.current;
+
+    // Copy current messages as fork context
+    const forkMessageIndex = state.chatMessages.length;
+
+    if (send) {
+      send({
+        type: 'fork',
+        parentSessionId,
+        newSessionId,
+        forkLabel: label,
+        forkMessageIndex,
+      });
+    }
+
+    // Dispatch custom event so WindowShell can create the window
+    window.dispatchEvent(new CustomEvent('venture-os:fork-chat', {
+      detail: { sessionId: newSessionId, parentSessionId, label, depth: 1, messages: [...state.chatMessages] },
+    }));
+
+    return newSessionId;
+  }, [state.chatMessages]);
+
+  const actions: DashboardActions = { selectProject, selectBrainNode, setCenterView, toggleCommandPalette, toggleScoreboard, sendChatMessage, stopResponse, editMessage, dismissNotification, addTerminalLine, setActiveDocument, setRightPanelTab, forkChat };
 
   return (
     <DashboardContext.Provider value={{ ...state, ...actions, _handleBridgeMessage: handleBridgeMessage, _registerWsSend: registerWsSend } as any}>

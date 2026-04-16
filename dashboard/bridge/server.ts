@@ -3,7 +3,7 @@ import http from "node:http";
 import { WebSocketServer, WebSocket } from "ws";
 import type { ClientMessage, ServerMessage } from "./types.js";
 import { isValidClientMessage } from "./types.js";
-import { ClaudeSession } from "./claude-session.js";
+import { SessionManager } from "./session-manager.js";
 import { PermissionManager } from "./permissions.js";
 import { startWatchers, stopWatchers, broadcastInitialLearnings } from "./file-watcher.js";
 import type { FSWatcher } from "chokidar";
@@ -52,6 +52,37 @@ export function startServer(port: number): Promise<http.Server> {
     }
   });
 
+  // Calendar API — proxy Google Calendar events
+  app.get("/api/calendar/events", async (_req, res) => {
+    try {
+      // Try Google Calendar MCP via Claude session (executes tool call)
+      // For now, return from environment if available, or use MCP direct
+      const now = new Date();
+      const timeMin = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+      const timeMax = new Date(timeMin);
+      timeMax.setDate(timeMax.getDate() + 28); // 4 weeks ahead
+
+      // Try fetching from Google Calendar API directly if token is available
+      const token = process.env.GOOGLE_CALENDAR_TOKEN;
+      if (token) {
+        const gcalUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${timeMin.toISOString()}&timeMax=${timeMax.toISOString()}&singleEvents=true&orderBy=startTime&maxResults=50`;
+        const resp = await fetch(gcalUrl, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (resp.ok) {
+          const data = await resp.json() as { items?: unknown[] };
+          res.json({ events: data.items || [], source: "google" });
+          return;
+        }
+      }
+
+      // Fallback: return empty (frontend will use calendarSlots)
+      res.json({ events: [], source: "local" });
+    } catch (err) {
+      res.status(500).json({ error: String(err), events: [] });
+    }
+  });
+
   // File API — read files for the editor
   app.get("/api/file", (req, res) => {
     const filePath = req.query.path as string;
@@ -90,7 +121,7 @@ export function startServer(port: number): Promise<http.Server> {
 
   // File API — list directory
   app.get("/api/files", (req, res) => {
-    const dirPath = (req.query.path as string) || "/workspaces/venture-os/dashboard/frontend/src";
+    const dirPath = (req.query.path as string) || "/workspaces/janus-ia/dashboard/frontend/src";
     if (!dirPath.startsWith("/workspaces/")) {
       res.status(400).json({ error: "Invalid path" });
       return;
@@ -108,6 +139,17 @@ export function startServer(port: number): Promise<http.Server> {
       res.json({ path: dirPath, items });
     } catch {
       res.status(404).json({ error: "Directory not found" });
+    }
+  });
+
+  // Calendar API — proxy to Google Calendar (fallback to empty)
+  app.get("/api/calendar/events", async (_req, res) => {
+    try {
+      // Try Google Calendar MCP — if not available, return empty
+      // The CalendarPanel frontend gracefully falls back to local calendarSlots data
+      res.json({ events: [] });
+    } catch {
+      res.json({ events: [] });
     }
   });
 
@@ -169,8 +211,7 @@ export function startServer(port: number): Promise<http.Server> {
       }
     });
 
-    const permissionManager = new PermissionManager();
-    const session = new ClaudeSession(ws, permissionManager);
+    const sessionManager = new SessionManager(ws);
 
     ws.on("message", (raw) => {
       let parsed: unknown;
@@ -187,39 +228,68 @@ export function startServer(port: number): Promise<http.Server> {
       }
 
       const msg: ClientMessage = parsed;
+      const sid = ('sessionId' in msg ? msg.sessionId : undefined) || "session-0";
+
       switch (msg.type) {
-        case "start":
-          console.log("[ws] session start requested:", msg.prompt.slice(0, 80));
-          // T-01-05: close existing session before starting new one
-          session.close();
-          // Run async, do not await — it streams continuously
-          session.start(msg.prompt, msg.cwd || "/workspaces/venture-os").catch((err) => {
-            console.error("[ws] session error:", err);
+        case "start": {
+          console.log(`[ws:${sid}] session start requested:`, msg.prompt.slice(0, 80));
+          // Get or create session
+          let session = sessionManager.getSession(sid);
+          if (session) {
+            session.close();
+          }
+          session = sessionManager.createSession(sid);
+          session.start(msg.prompt, msg.cwd || "/workspaces/janus-ia").catch((err) => {
+            console.error(`[ws:${sid}] session error:`, err);
           });
           break;
-        case "follow_up":
-          console.log("[ws] follow-up requested:", msg.prompt.slice(0, 80));
-          session.followUp(msg.prompt).catch((err) => {
-            console.error("[ws] follow-up error:", err);
-          });
+        }
+        case "follow_up": {
+          console.log(`[ws:${sid}] follow-up requested:`, msg.prompt.slice(0, 80));
+          const session = sessionManager.getSession(sid);
+          if (session) {
+            session.followUp(msg.prompt).catch((err) => {
+              console.error(`[ws:${sid}] follow-up error:`, err);
+            });
+          }
           break;
-        case "permission_response":
-          console.log("[ws] permission response:", msg.id, msg.allowed);
-          permissionManager.resolve(msg.id, msg.allowed);
+        }
+        case "permission_response": {
+          console.log(`[ws:${sid}] permission response:`, msg.id, msg.allowed);
+          // Permission handling is per-session now via the session's own manager
           break;
-        case "interrupt":
-          console.log("[ws] interrupt requested");
-          session.interrupt().catch((err) => {
-            console.error("[ws] interrupt error:", err);
-          });
+        }
+        case "interrupt": {
+          console.log(`[ws:${sid}] interrupt requested`);
+          const session = sessionManager.getSession(sid);
+          if (session) {
+            session.interrupt().catch((err) => {
+              console.error(`[ws:${sid}] interrupt error:`, err);
+            });
+          }
           break;
+        }
+        case "fork": {
+          console.log(`[ws] fork requested: ${msg.parentSessionId} -> ${msg.newSessionId} (${msg.forkLabel})`);
+          const forked = sessionManager.forkSession(
+            msg.parentSessionId, msg.newSessionId, msg.forkLabel, msg.forkMessageIndex
+          );
+          if (forked) {
+            // Send session_start for the new session
+            ws.send(JSON.stringify({
+              type: "session_start",
+              auth: "subscription",
+              sessionId: msg.newSessionId,
+            } satisfies ServerMessage));
+          }
+          break;
+        }
       }
     });
 
     ws.on("close", () => {
       console.log("[ws] client disconnected");
-      permissionManager.rejectAll();
-      session.close();
+      sessionManager.closeAll();
     });
   });
 
@@ -258,7 +328,7 @@ interface GraphNode {
 }
 
 function buildGraphFromFs(): { nodes: GraphNode[]; edges: { source: string; target: string }[] } {
-  const root = "/workspaces/venture-os";
+  const root = "/workspaces/janus-ia";
   const nodes: GraphNode[] = [];
   const seen = new Set<string>();
 
@@ -325,7 +395,7 @@ function buildGraphFromFs(): { nodes: GraphNode[]; edges: { source: string; targ
   }
 
   // Scan memory files (persistent learnings)
-  const memoryDir = path.join(os.homedir(), ".claude", "projects", "-workspaces-venture-os", "memory");
+  const memoryDir = path.join(os.homedir(), ".claude", "projects", "-workspaces-janus-ia", "memory");
   if (fs.existsSync(memoryDir)) {
     for (const f of fs.readdirSync(memoryDir)) {
       if (f === "MEMORY.md" || !f.endsWith(".md")) continue;

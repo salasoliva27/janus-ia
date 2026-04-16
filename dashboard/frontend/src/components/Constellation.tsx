@@ -34,6 +34,7 @@ export function Constellation() {
   const views: { id: CenterView; label: string }[] = [
     { id: 'constellation', label: 'Projects' },
     { id: 'brain', label: 'Brain' },
+    { id: 'procedures', label: 'Procedures' },
     { id: 'files', label: 'Activity' },
   ];
 
