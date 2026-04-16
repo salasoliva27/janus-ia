@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useDashboard } from '../store';
 
 interface SQLConsoleProps {
   tool: 'supabase' | 'snowflake';
@@ -53,12 +54,37 @@ function formatCell(v: unknown): string {
 }
 
 export function SQLConsole({ tool }: SQLConsoleProps) {
+  const { sendChatMessage } = useDashboard();
   const [query, setQuery] = useState<string>('');
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<QueryResult | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>(() => loadHistory(tool));
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [handedOff, setHandedOff] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  function handOffToChat() {
+    if (!result || result.ok) return;
+    const errText = typeof result.error === 'string'
+      ? result.error
+      : JSON.stringify(result.error, null, 2);
+    const msg = [
+      `I ran a query in the ${tool === 'supabase' ? 'Supabase' : 'Snowflake'} console and it errored. Can you fix it?`,
+      '',
+      'Query:',
+      '```sql',
+      query.trim() || history[0]?.query || '',
+      '```',
+      '',
+      'Error:',
+      '```',
+      errText,
+      '```',
+    ].join('\n');
+    sendChatMessage(msg);
+    setHandedOff(true);
+    setTimeout(() => setHandedOff(false), 2500);
+  }
 
   useEffect(() => {
     // Focus on mount
@@ -196,9 +222,19 @@ export function SQLConsole({ tool }: SQLConsoleProps) {
           <div className="sql-console__empty">running…</div>
         )}
         {result && !result.ok && (
-          <pre className="sql-console__error">
-            {typeof result.error === 'string' ? result.error : JSON.stringify(result.error, null, 2)}
-          </pre>
+          <div className="sql-console__error-wrap">
+            <pre className="sql-console__error">
+              {typeof result.error === 'string' ? result.error : JSON.stringify(result.error, null, 2)}
+            </pre>
+            <button
+              className="sql-console__ask-claude"
+              onClick={handOffToChat}
+              title="Send query + error to chat"
+              disabled={handedOff}
+            >
+              {handedOff ? '✓ sent to chat' : '→ ask Claude to fix'}
+            </button>
+          </div>
         )}
         {result?.ok && rows.length === 0 && (
           <div className="sql-console__empty">query ok — 0 rows returned</div>

@@ -11,9 +11,19 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
+const WORKSPACE_ROOT = "/workspaces/janus-ia";
+const UPLOADS_DIR = path.join(WORKSPACE_ROOT, "dump", "uploads");
+const THEMES_DIR = path.join(os.homedir(), ".claude", "projects", "-workspaces-janus-ia", "themes");
+
+function safeFileName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100);
+}
+
 export function startServer(port: number): Promise<http.Server> {
   const app = express();
-  app.use(express.json());
+  // Raise the JSON body limit — chat uploads arrive as base64, and a ~10MB
+  // PDF becomes ~14MB base64. 30MB gives comfortable headroom.
+  app.use(express.json({ limit: "30mb" }));
 
   // Serve frontend static files in production
   const frontendDist = path.join(path.dirname(new URL(import.meta.url).pathname), "..", "frontend", "dist");
@@ -184,10 +194,46 @@ export function startServer(port: number): Promise<http.Server> {
     }
 
     if (tool === "snowflake") {
-      res.status(501).json({
-        ok: false,
-        error: "Snowflake execution not wired yet — add snowflake-sdk + SNOWFLAKE_* creds (phase 4).",
-      });
+      const need = ["SNOWFLAKE_ACCOUNT", "SNOWFLAKE_USER", "SNOWFLAKE_PASSWORD"];
+      const missing = need.filter(k => !process.env[k]);
+      if (missing.length) {
+        res.status(400).json({
+          ok: false,
+          error: `Missing Snowflake env vars: ${missing.join(", ")} — open the Key Vault to add them.`,
+        });
+        return;
+      }
+      try {
+        const t0 = Date.now();
+        const { default: snowflake } = await import("snowflake-sdk");
+        const conn = snowflake.createConnection({
+          account: process.env.SNOWFLAKE_ACCOUNT!,
+          username: process.env.SNOWFLAKE_USER!,
+          password: process.env.SNOWFLAKE_PASSWORD!,
+          warehouse: process.env.SNOWFLAKE_WAREHOUSE,
+          database: process.env.SNOWFLAKE_DATABASE,
+          schema: process.env.SNOWFLAKE_SCHEMA,
+          role: process.env.SNOWFLAKE_ROLE,
+        });
+        await new Promise<void>((resolve, reject) => {
+          conn.connect(err => (err ? reject(err) : resolve()));
+        });
+        const rows = await new Promise<Record<string, unknown>[]>((resolve, reject) => {
+          conn.execute({
+            sqlText: query,
+            complete: (err, _stmt, rowData) => (err ? reject(err) : resolve((rowData ?? []) as Record<string, unknown>[])),
+          });
+        });
+        await new Promise<void>(resolve => {
+          conn.destroy(() => resolve());
+        });
+        const elapsed = Date.now() - t0;
+        const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+        res.json({ ok: true, rows, columns, rowCount: rows.length, elapsed });
+      } catch (err) {
+        const e = err as { message?: string; code?: string | number };
+        res.status(500).json({ ok: false, error: e?.message ? `${e.message}${e.code ? ` (code ${e.code})` : ""}` : String(err) });
+      }
       return;
     }
 
@@ -373,6 +419,237 @@ export function startServer(port: number): Promise<http.Server> {
       }
     } catch (err) {
       res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+
+  // Memory API — exposes auto-memory index so chat can show "what's loaded"
+  app.get("/api/memory/index", (_req, res) => {
+    try {
+      const memDir = path.join(os.homedir(), ".claude", "projects", "-workspaces-janus-ia", "memory");
+      if (!fs.existsSync(memDir)) {
+        res.json({ entries: [], indexContent: "", dir: memDir });
+        return;
+      }
+
+      const indexPath = path.join(memDir, "MEMORY.md");
+      const indexContent = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, "utf-8") : "";
+
+      const entries: Array<{
+        file: string;
+        name: string;
+        description: string;
+        type: string;
+        updatedAt: number;
+        preview: string;
+      }> = [];
+
+      for (const f of fs.readdirSync(memDir)) {
+        if (f === "MEMORY.md" || !f.endsWith(".md")) continue;
+        try {
+          const full = path.join(memDir, f);
+          const stat = fs.statSync(full);
+          const raw = fs.readFileSync(full, "utf-8");
+
+          // Parse frontmatter between --- blocks
+          const fmMatch = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+          const fm = fmMatch?.[1] || "";
+          const body = fmMatch?.[2] || raw;
+
+          const nameMatch = fm.match(/^name:\s*(.+)$/m);
+          const descMatch = fm.match(/^description:\s*(.+)$/m);
+          const typeMatch = fm.match(/^type:\s*(\w+)/m);
+
+          const preview = body.trim().slice(0, 240);
+          entries.push({
+            file: f,
+            name: nameMatch?.[1]?.trim() || f.replace(/\.md$/, ""),
+            description: descMatch?.[1]?.trim() || "",
+            type: typeMatch?.[1]?.trim() || "memory",
+            updatedAt: stat.mtimeMs,
+            preview,
+          });
+        } catch { /* skip unreadable files */ }
+      }
+
+      // Most recent first
+      entries.sort((a, b) => b.updatedAt - a.updatedAt);
+
+      res.json({ entries, indexContent, dir: memDir });
+    } catch (err) {
+      res.status(500).json({ error: String(err), entries: [] });
+    }
+  });
+
+  // Memory API — read full content of a specific memory file
+  app.get("/api/memory/file", (req, res) => {
+    try {
+      const name = (req.query.name as string) || "";
+      // Only allow bare filenames, no slashes
+      if (!name || name.includes("/") || name.includes("..") || !name.endsWith(".md")) {
+        res.status(400).json({ error: "Invalid memory file name" });
+        return;
+      }
+      const memDir = path.join(os.homedir(), ".claude", "projects", "-workspaces-janus-ia", "memory");
+      const full = path.join(memDir, name);
+      if (!fs.existsSync(full)) {
+        res.status(404).json({ error: "Not found" });
+        return;
+      }
+      const content = fs.readFileSync(full, "utf-8");
+      res.json({ name, content });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // Session API — expose persisted dashboard-session state (so frontend can show continuity)
+  app.get("/api/session/:id", (req, res) => {
+    try {
+      const id = req.params.id.replace(/[^a-zA-Z0-9_-]/g, "_");
+      const file = path.join(
+        os.homedir(),
+        ".claude",
+        "projects",
+        "-workspaces-janus-ia",
+        "dashboard-sessions",
+        `${id}.json`,
+      );
+      if (!fs.existsSync(file)) {
+        res.json({ persisted: false });
+        return;
+      }
+      const data = JSON.parse(fs.readFileSync(file, "utf-8"));
+      res.json({
+        persisted: true,
+        claudeSessionId: data.claudeSessionId || null,
+        updatedAt: data.updatedAt || 0,
+        turnCount: Array.isArray(data.conversationLog) ? data.conversationLog.length : 0,
+      });
+    } catch {
+      res.json({ persisted: false });
+    }
+  });
+
+  // Chat file upload — stores files under dump/uploads/ so Claude's Read tool can consume them
+  app.post("/api/chat/upload", (req, res) => {
+    try {
+      const { name, type, data } = (req.body || {}) as { name?: string; type?: string; data?: string };
+      if (!name || typeof data !== "string") {
+        res.status(400).json({ ok: false, error: "Missing name or data" });
+        return;
+      }
+      const clean = safeFileName(name);
+      const filename = `${Date.now()}-${clean}`;
+      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+      const full = path.join(UPLOADS_DIR, filename);
+      // Accept either base64 ("data:...;base64,XXX" or bare base64) or plain text
+      let buf: Buffer;
+      if (data.startsWith("data:")) {
+        const commaIdx = data.indexOf(",");
+        buf = Buffer.from(data.slice(commaIdx + 1), "base64");
+      } else {
+        // Heuristic: if it decodes cleanly as base64 assume base64, else treat as text
+        try { buf = Buffer.from(data, "base64"); if (buf.length === 0) throw new Error(); }
+        catch { buf = Buffer.from(data, "utf-8"); }
+      }
+      fs.writeFileSync(full, buf);
+      res.json({ ok: true, path: full, filename, size: buf.length, type: type || "" });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+
+  // Custom theme extraction — runs `claude -p` with a locked JSON-response prompt
+  // against uploaded brand assets and saves the result as a named theme preset.
+  app.post("/api/theme/extract", async (req, res) => {
+    try {
+      const { paths, hint } = (req.body || {}) as { paths?: string[]; hint?: string };
+      if (!Array.isArray(paths) || paths.length === 0) {
+        res.status(400).json({ ok: false, error: "No file paths provided" });
+        return;
+      }
+      // Basic path safety: must live under the uploads dir
+      for (const p of paths) {
+        if (typeof p !== "string" || !p.startsWith(UPLOADS_DIR)) {
+          res.status(400).json({ ok: false, error: `Invalid path: ${p}` });
+          return;
+        }
+      }
+
+      const fileList = paths.map(p => `- ${p}`).join("\n");
+      const prompt = `You are a brand-to-theme extractor. Analyse the attached asset(s) and return ONLY a single JSON object — no prose, no code fence, no markdown.
+
+Files:
+${fileList}
+${hint ? `\nHint from user: ${hint}` : ""}
+
+Use the Read tool to open each file. For images: identify the dominant brand color and a complementary accent. For PDFs/docs: extract any brand color hexes or explicit guidelines. For screenshots: read the chrome/background vs accent contrast.
+
+Return exactly this shape:
+{
+  "name": "<short 1–3 word theme name based on brand>",
+  "mode": "light" | "dark",
+  "primaryHue": <number 0–360>,
+  "accentHue": <number 0–360>,
+  "chroma": <number 0.05–0.25>,
+  "rationale": "<one sentence on why you picked these>"
+}
+
+Do not include anything except the JSON object.`;
+
+      const { spawn } = await import("node:child_process");
+      const cleanEnv = { ...process.env };
+      delete cleanEnv.ANTHROPIC_API_KEY;
+      const proc = spawn(
+        "claude",
+        ["-p", prompt, "--output-format", "text", "--dangerously-skip-permissions", "--disable-slash-commands"],
+        { cwd: WORKSPACE_ROOT, env: cleanEnv },
+      );
+      let stdout = "", stderr = "";
+      proc.stdout?.on("data", d => { stdout += d.toString(); });
+      proc.stderr?.on("data", d => { stderr += d.toString(); });
+      const exitCode: number = await new Promise(resolve => {
+        const timer = setTimeout(() => { proc.kill("SIGTERM"); resolve(124); }, 90_000);
+        proc.on("close", code => { clearTimeout(timer); resolve(code ?? 1); });
+      });
+      if (exitCode !== 0) {
+        res.status(502).json({ ok: false, error: `claude exited ${exitCode}: ${stderr.slice(0, 500)}` });
+        return;
+      }
+      // Extract first top-level JSON object from stdout
+      const match = stdout.match(/\{[\s\S]*\}/);
+      if (!match) { res.status(502).json({ ok: false, error: "No JSON in model output", raw: stdout.slice(0, 500) }); return; }
+      let spec: { name?: string; mode?: string; primaryHue?: number; accentHue?: number; chroma?: number; rationale?: string };
+      try { spec = JSON.parse(match[0]); } catch { res.status(502).json({ ok: false, error: "Malformed JSON", raw: match[0].slice(0, 500) }); return; }
+      // Validate + clamp
+      const name = typeof spec.name === "string" && spec.name.trim() ? spec.name.trim().slice(0, 30) : "Custom";
+      const mode: "light" | "dark" = spec.mode === "light" ? "light" : "dark";
+      const primaryHue = Math.max(0, Math.min(360, Number(spec.primaryHue) || 240));
+      const accentHue = Math.max(0, Math.min(360, Number(spec.accentHue) || primaryHue));
+      const chroma = Math.max(0.05, Math.min(0.25, Number(spec.chroma) || 0.14));
+
+      const id = `custom-${Date.now().toString(36)}`;
+      const theme = { id, name, mode, primaryHue, accentHue, chroma, rationale: spec.rationale || "", createdAt: Date.now() };
+      fs.mkdirSync(THEMES_DIR, { recursive: true });
+      fs.writeFileSync(path.join(THEMES_DIR, `${id}.json`), JSON.stringify(theme, null, 2));
+      res.json({ ok: true, theme });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+
+  // List custom themes — frontend merges these into the theme picker
+  app.get("/api/theme/custom", (_req, res) => {
+    try {
+      if (!fs.existsSync(THEMES_DIR)) { res.json({ themes: [] }); return; }
+      const themes: unknown[] = [];
+      for (const f of fs.readdirSync(THEMES_DIR)) {
+        if (!f.endsWith(".json")) continue;
+        try { themes.push(JSON.parse(fs.readFileSync(path.join(THEMES_DIR, f), "utf-8"))); } catch {}
+      }
+      res.json({ themes });
+    } catch (err) {
+      res.status(500).json({ themes: [], error: String(err) });
     }
   });
 

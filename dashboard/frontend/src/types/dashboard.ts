@@ -189,13 +189,35 @@ export interface DashboardState {
   rightPanelTab: 'memory' | 'documents' | 'editor';
   agentCounts: Record<string, number>;
   projectCounts: Record<string, number>;
+  /** Auto-memory index loaded from /api/memory/index */
+  memoryIndex: MemoryIndex | null;
 }
 
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'memory';
   content: string;
   timestamp: number;
+  /** For memory messages: which memory file / operation this refers to */
+  memoryRef?: string;
+  /** For memory messages: direction of the operation */
+  memoryAction?: 'recall' | 'remember' | 'read' | 'write' | 'resume';
+}
+
+export interface MemoryIndexEntry {
+  file: string;
+  name: string;
+  description: string;
+  type: string;
+  updatedAt: number;
+  preview: string;
+}
+
+export interface MemoryIndex {
+  entries: MemoryIndexEntry[];
+  indexContent: string;
+  dir: string;
+  fetchedAt: number;
 }
 
 /** Per-session chat state — each fork gets its own message list + status */

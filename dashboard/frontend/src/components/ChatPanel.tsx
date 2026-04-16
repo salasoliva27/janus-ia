@@ -26,7 +26,27 @@ function ToolCallCard({ content }: { content: string }) {
   );
 }
 
+const MEMORY_ICON: Record<string, string> = {
+  recall: '↺',
+  remember: '✎',
+  read: '⟵',
+  write: '⟶',
+  resume: '↻',
+};
+
 function MessageContent({ msg }: { msg: ChatMessage }) {
+  if (msg.role === 'memory') {
+    const icon = MEMORY_ICON[msg.memoryAction || ''] || '·';
+    return (
+      <span className="chat-memory-pulse__content">
+        <span className="chat-memory-pulse__icon">{icon}</span>
+        <span className="chat-memory-pulse__action">{msg.memoryAction || 'memory'}</span>
+        {msg.memoryRef && <span className="chat-memory-pulse__ref">{msg.memoryRef}</span>}
+        <span className="chat-memory-pulse__text">{msg.content}</span>
+      </span>
+    );
+  }
+
   if (msg.role === 'system') {
     if (msg.content.startsWith('Permission needed:')) {
       return <ToolCallCard content={msg.content} />;
@@ -100,7 +120,7 @@ interface ChatPanelProps {
 
 export function ChatPanel({ sessionId = 'session-0', lineageLabel, lineageColor }: ChatPanelProps) {
   const dashboard = useDashboard();
-  const { chatAuth, sendChatMessage, stopResponse, editMessage, forkChat, getSessionChat } = dashboard;
+  const { chatAuth, sendChatMessage, stopResponse, editMessage, forkChat, getSessionChat, memoryIndex } = dashboard;
 
   // Read from this session's own chat state
   const sessionChat = getSessionChat(sessionId);
@@ -114,16 +134,72 @@ export function ChatPanel({ sessionId = 'session-0', lineageLabel, lineageColor 
   const [hoveredMsgId, setHoveredMsgId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  interface PendingAttachment { name: string; size: number; type: string; path?: string; uploading: boolean; error?: string; file: File }
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+  const [dropActive, setDropActive] = useState(false);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  async function uploadFile(file: File): Promise<{ path?: string; error?: string }> {
+    try {
+      const data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      const resp = await fetch('/api/chat/upload', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: file.name, type: file.type, data }),
+      });
+      const json = await resp.json();
+      if (!resp.ok || !json.ok) return { error: json.error || `HTTP ${resp.status}` };
+      return { path: json.path };
+    } catch (err) { return { error: String(err) }; }
+  }
+
+  function acceptFiles(files: FileList | File[]) {
+    const list = Array.from(files);
+    if (list.length === 0) return;
+    // Reject anything over 25MB (server allows 30MB base64 ≈ ~22MB binary)
+    const valid = list.filter(f => {
+      if (f.size > 25 * 1024 * 1024) { alert(`${f.name} is over 25MB and won't be attached.`); return false; }
+      return true;
+    });
+    const pending: PendingAttachment[] = valid.map(f => ({
+      name: f.name, size: f.size, type: f.type, uploading: true, file: f,
+    }));
+    setAttachments(a => [...a, ...pending]);
+    for (const p of pending) {
+      uploadFile(p.file).then(r => {
+        setAttachments(a => a.map(x => x.file === p.file ? { ...x, uploading: false, path: r.path, error: r.error } : x));
+      });
+    }
+  }
+
+  function removeAttachment(i: number) {
+    setAttachments(a => a.filter((_, idx) => idx !== i));
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!input.trim()) return;
-    sendChatMessage(input, sessionId);
+    const ready = attachments.filter(a => a.path);
+    const hasText = input.trim().length > 0;
+    if (!hasText && ready.length === 0) return;
+    // If uploads are still in flight, wait
+    if (attachments.some(a => a.uploading)) return;
+
+    let prompt = input.trim();
+    if (ready.length > 0) {
+      const list = ready.map(a => `  - ${a.path} (${a.name}, ${a.type || 'file'})`).join('\n');
+      prompt = `[User attached ${ready.length} file${ready.length === 1 ? '' : 's'} — use the Read tool to open them]\n${list}\n\n${prompt || '(Please review the attached files.)'}`;
+    }
+    sendChatMessage(prompt, sessionId);
     setInput('');
+    setAttachments([]);
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
@@ -144,7 +220,10 @@ export function ChatPanel({ sessionId = 'session-0', lineageLabel, lineageColor 
   const cfg = STATUS_CONFIG[chatStatus] || STATUS_CONFIG.idle;
   const [learnOpen, setLearnOpen] = useState(false);
   const [learnTime, setLearnTime] = useState('');
+  const [memoryOpen, setMemoryOpen] = useState(false);
   const isBusy = chatStatus === 'thinking' || chatStatus === 'streaming';
+  const memoryCount = memoryIndex?.entries.length || 0;
+  const memoryTypes = memoryIndex ? Array.from(new Set(memoryIndex.entries.map(e => e.type))) : [];
 
   function startLearn() {
     const t = learnTime.trim();
@@ -160,7 +239,20 @@ export function ChatPanel({ sessionId = 'session-0', lineageLabel, lineageColor 
   }
 
   return (
-    <div className="chat-panel">
+    <div
+      className={`chat-panel ${dropActive ? 'chat-panel--drop-active' : ''}`}
+      onDragOver={e => { e.preventDefault(); setDropActive(true); }}
+      onDragLeave={e => { if (e.currentTarget === e.target) setDropActive(false); }}
+      onDrop={e => {
+        e.preventDefault(); setDropActive(false);
+        if (e.dataTransfer.files?.length) acceptFiles(e.dataTransfer.files);
+      }}
+    >
+      {dropActive && (
+        <div className="chat-panel__drop-overlay">
+          <div className="chat-panel__drop-text">Drop files to attach</div>
+        </div>
+      )}
       {/* Header */}
       <div className="chat-panel__header">
         <span>
@@ -229,6 +321,52 @@ export function ChatPanel({ sessionId = 'session-0', lineageLabel, lineageColor 
         </div>
       )}
 
+      {/* Memory banner — shows what auto-memory is active */}
+      {memoryIndex && (
+        <div className={`chat-panel__memory-bar ${memoryOpen ? 'chat-panel__memory-bar--open' : ''}`}>
+          <button
+            className="chat-panel__memory-bar-header"
+            onClick={() => setMemoryOpen(v => !v)}
+            title="Auto-memory loaded into this session"
+          >
+            <span className="chat-panel__memory-bar-caret">{memoryOpen ? 'v' : '>'}</span>
+            <span className="chat-panel__memory-bar-icon">🧠</span>
+            <span className="chat-panel__memory-bar-label">
+              {memoryCount === 0
+                ? 'No memories yet — Claude will write as it learns'
+                : `${memoryCount} ${memoryCount === 1 ? 'memory' : 'memories'} active`}
+            </span>
+            {memoryTypes.length > 0 && (
+              <span className="chat-panel__memory-bar-types">
+                {memoryTypes.slice(0, 4).join(' · ')}
+              </span>
+            )}
+          </button>
+          {memoryOpen && memoryIndex.entries.length > 0 && (
+            <div className="chat-panel__memory-bar-list">
+              {memoryIndex.entries.slice(0, 30).map(e => (
+                <div key={e.file} className="chat-panel__memory-bar-item">
+                  <span className={`chat-panel__memory-bar-type chat-panel__memory-bar-type--${e.type}`}>
+                    {e.type}
+                  </span>
+                  <span className="chat-panel__memory-bar-name" title={e.description}>
+                    {e.name}
+                  </span>
+                  {e.description && (
+                    <span className="chat-panel__memory-bar-desc">{e.description}</span>
+                  )}
+                </div>
+              ))}
+              {memoryIndex.entries.length > 30 && (
+                <div className="chat-panel__memory-bar-more">
+                  +{memoryIndex.entries.length - 30} more
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Messages */}
       <div className="chat-panel__messages">
         {messages.map(msg => (
@@ -292,8 +430,39 @@ export function ChatPanel({ sessionId = 'session-0', lineageLabel, lineageColor 
             </button>
           )}
         </div>
+        {attachments.length > 0 && (
+          <div className="chat-panel__attachments">
+            {attachments.map((a, i) => (
+              <div key={i} className={`chat-panel__chip ${a.error ? 'chat-panel__chip--error' : ''} ${a.uploading ? 'chat-panel__chip--uploading' : ''}`}>
+                <span className="chat-panel__chip-icon">{a.type.startsWith('image/') ? '🖼' : a.type.includes('pdf') ? '📄' : '📎'}</span>
+                <span className="chat-panel__chip-name" title={a.name}>{a.name}</span>
+                <span className="chat-panel__chip-size">{(a.size / 1024).toFixed(0)}kB</span>
+                {a.uploading && <span className="chat-panel__chip-status">uploading…</span>}
+                {a.error && <span className="chat-panel__chip-status" title={a.error}>error</span>}
+                <button type="button" className="chat-panel__chip-x" onClick={() => removeAttachment(i)} title="Remove">×</button>
+              </div>
+            ))}
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="chat-panel__form">
           <div className="chat-panel__input-wrap">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              style={{ display: 'none' }}
+              onChange={e => { if (e.target.files?.length) acceptFiles(e.target.files); e.target.value = ''; }}
+            />
+            <button
+              type="button"
+              className="chat-panel__attach-btn"
+              onClick={() => fileInputRef.current?.click()}
+              title="Attach files (images, PDFs, docs)"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+              </svg>
+            </button>
             <textarea
               ref={inputRef}
               className="chat-panel__input"
@@ -305,9 +474,9 @@ export function ChatPanel({ sessionId = 'session-0', lineageLabel, lineageColor 
             />
             <button
               type="submit"
-              className={`chat-panel__send-btn ${input.trim() ? 'chat-panel__send-btn--active' : ''}`}
-              disabled={!input.trim()}
-              title="Send message"
+              className={`chat-panel__send-btn ${(input.trim() || attachments.some(a => a.path)) ? 'chat-panel__send-btn--active' : ''}`}
+              disabled={(!input.trim() && !attachments.some(a => a.path)) || attachments.some(a => a.uploading)}
+              title={attachments.some(a => a.uploading) ? 'Waiting for uploads…' : 'Send message'}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M5 12h14" />

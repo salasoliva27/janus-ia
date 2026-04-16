@@ -1,11 +1,63 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
 import type { WebSocket } from "ws";
 import type { ServerMessage } from "./types.js";
 
 const WORKSPACE_ROOT = "/workspaces/janus-ia";
+const SESSIONS_DIR = path.join(
+  os.homedir(),
+  ".claude",
+  "projects",
+  "-workspaces-janus-ia",
+  "dashboard-sessions",
+);
 
 function isValidCwd(cwd: string): boolean {
   return cwd.startsWith(WORKSPACE_ROOT);
+}
+
+function sessionFile(sessionId: string): string {
+  const safe = sessionId.replace(/[^a-zA-Z0-9_-]/g, "_");
+  return path.join(SESSIONS_DIR, `${safe}.json`);
+}
+
+function loadPersistedSession(sessionId: string): {
+  claudeSessionId: string | null;
+  conversationLog: string[];
+} {
+  try {
+    const raw = fs.readFileSync(sessionFile(sessionId), "utf-8");
+    const parsed = JSON.parse(raw);
+    return {
+      claudeSessionId: typeof parsed.claudeSessionId === "string" ? parsed.claudeSessionId : null,
+      conversationLog: Array.isArray(parsed.conversationLog) ? parsed.conversationLog.slice(-50) : [],
+    };
+  } catch {
+    return { claudeSessionId: null, conversationLog: [] };
+  }
+}
+
+function persistSession(
+  sessionId: string,
+  claudeSessionId: string | null,
+  conversationLog: string[],
+  lastPrompt: string,
+): void {
+  try {
+    fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+    const payload = {
+      sessionId,
+      claudeSessionId,
+      conversationLog: conversationLog.slice(-50),
+      lastPrompt: lastPrompt.slice(0, 500),
+      updatedAt: Date.now(),
+    };
+    fs.writeFileSync(sessionFile(sessionId), JSON.stringify(payload, null, 2));
+  } catch (err) {
+    console.warn(`[session:${sessionId}] failed to persist:`, err);
+  }
 }
 
 export class ClaudeSession {
@@ -14,12 +66,25 @@ export class ClaudeSession {
   private timeout: ReturnType<typeof setTimeout> | null = null;
   private conversationLog: string[] = [];
   private forkContext: string[] | null = null;
+  private lastPrompt: string = "";
 
   constructor(
     private ws: WebSocket,
     _permissionManager: unknown,
     private sessionId: string = "session-0",
-  ) {}
+  ) {
+    const persisted = loadPersistedSession(sessionId);
+    this.claudeSessionId = persisted.claudeSessionId;
+    this.conversationLog = persisted.conversationLog;
+    if (this.claudeSessionId) {
+      console.log(`[session:${sessionId}] resumed claude id: ${this.claudeSessionId}`);
+    }
+  }
+
+  /** Whether a persisted Claude session exists (can --continue on next turn) */
+  hasPersistedSession(): boolean {
+    return this.claudeSessionId !== null;
+  }
 
   /** Set conversation history from parent session (for forks) */
   setForkContext(history: string[]): void {
@@ -70,6 +135,9 @@ export class ClaudeSession {
 
     // Log user message
     this.conversationLog.push(`User: ${prompt}`);
+    this.lastPrompt = prompt;
+    // Persist immediately so a crash mid-turn doesn't lose the user's message
+    persistSession(this.sessionId, this.claudeSessionId, this.conversationLog, prompt);
 
     const proc = spawn("claude", args, {
       cwd: safeCwd,
@@ -143,6 +211,9 @@ export class ClaudeSession {
         this.conversationLog.push(`Assistant: ${assistantBuffer}`);
       }
 
+      // Persist after the turn completes (claudeSessionId now settled)
+      persistSession(this.sessionId, this.claudeSessionId, this.conversationLog, this.lastPrompt);
+
       this.send({
         type: "session_end",
         cost: undefined,
@@ -181,6 +252,8 @@ export class ClaudeSession {
         if (event.session_id) {
           this.claudeSessionId = event.session_id;
           console.log(`[session:${this.sessionId}] claude id:`, this.claudeSessionId);
+          // Persist the claude id as soon as we have it — survives crashes mid-turn
+          persistSession(this.sessionId, this.claudeSessionId, this.conversationLog, this.lastPrompt);
         }
         return null;
       }

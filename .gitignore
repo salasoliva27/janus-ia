@@ -8,3 +8,5 @@ outputs/screenshots/
 # Obsidian personal state (do not commit — machine-specific)
 .obsidian/workspace.json
 .obsidian/workspace-mobile.json
+# Chat file uploads — user-submitted, not versioned
+dump/uploads/

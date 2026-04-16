@@ -159,30 +159,193 @@ function applyTheme(preset: ThemePreset) {
   localStorage.setItem('venture-os-theme', preset.id);
 }
 
+// ── Custom theme synthesis ────────────────────────────────
+// Convert a hue + chroma + mode spec (returned by the backend) into the full
+// CSS-var set our app uses. Keeps custom themes visually coherent with presets.
+function buildCustomPreset(spec: {
+  id: string; name: string; mode: 'light' | 'dark'; primaryHue: number; accentHue: number; chroma: number;
+}): ThemePreset {
+  const { mode, primaryHue: h, accentHue: ah, chroma: c } = spec;
+  const cBg = Math.min(c * 0.15, 0.025); // very low chroma for bg
+  const cText = Math.min(c * 0.2, 0.03);
+  if (mode === 'light') {
+    return {
+      id: spec.id, name: spec.name,
+      vars: {
+        '--color-bg-primary': `oklch(0.96 ${cBg} ${h})`,
+        '--color-bg-secondary': `oklch(0.99 ${cBg * 0.6} ${h})`,
+        '--color-bg-surface': `oklch(0.93 ${cBg * 1.2} ${h})`,
+        '--color-bg-elevated': `oklch(0.89 ${cBg * 1.6} ${h})`,
+        '--color-bg-inset': `oklch(0.92 ${cBg} ${h})`,
+        '--color-text-primary': `oklch(0.18 ${cText} ${h})`,
+        '--color-text-secondary': `oklch(0.34 ${cText * 0.9} ${h})`,
+        '--color-text-muted': `oklch(0.50 ${cText * 0.7} ${h})`,
+        '--color-text-on-accent': `oklch(0.99 ${cBg * 0.4} ${h})`,
+        '--color-accent': `oklch(0.52 ${c} ${ah})`,
+        '--border-color': `oklch(0.78 ${cBg * 1.5} ${h})`,
+      },
+    };
+  }
+  return {
+    id: spec.id, name: spec.name,
+    vars: {
+      '--color-bg-primary': `oklch(0.11 ${cBg} ${h})`,
+      '--color-bg-secondary': `oklch(0.14 ${cBg} ${h})`,
+      '--color-bg-surface': `oklch(0.18 ${cBg * 1.2} ${h})`,
+      '--color-bg-elevated': `oklch(0.22 ${cBg * 1.4} ${h})`,
+      '--color-bg-inset': `oklch(0.09 ${cBg * 0.8} ${h})`,
+      '--color-text-primary': `oklch(0.96 ${cText * 0.3} ${h})`,
+      '--color-text-secondary': `oklch(0.72 ${cText * 0.5} ${h})`,
+      '--color-text-muted': `oklch(0.48 ${cText * 0.6} ${h})`,
+      '--color-text-on-accent': `oklch(0.13 ${cBg} ${h})`,
+      '--color-accent': `oklch(0.75 ${c} ${ah})`,
+      '--border-color': `oklch(0.22 ${cBg} ${h})`,
+    },
+  };
+}
+
+interface CustomThemeSpec {
+  id: string; name: string; mode: 'light' | 'dark';
+  primaryHue: number; accentHue: number; chroma: number;
+  rationale?: string; createdAt?: number;
+}
+
 export function useThemeInit() {
   useEffect(() => {
     const saved = localStorage.getItem('venture-os-theme') || 'dark';
-    const preset = PRESETS.find(p => p.id === saved);
-    if (preset) applyTheme(preset);
+    let preset = PRESETS.find(p => p.id === saved);
+    if (!preset && saved.startsWith('custom-')) {
+      // Try to rehydrate from backend
+      fetch('/api/theme/custom').then(r => r.json()).then(data => {
+        const spec = (data.themes || []).find((t: CustomThemeSpec) => t.id === saved);
+        if (spec) applyTheme(buildCustomPreset(spec));
+      }).catch(() => {});
+    } else if (preset) {
+      applyTheme(preset);
+    }
   }, []);
 }
 
+function CustomThemeBuilder({ onCreated, onCancel }: { onCreated: (p: ThemePreset) => void; onCancel: () => void }) {
+  const [files, setFiles] = useState<File[]>([]);
+  const [hint, setHint] = useState('');
+  const [status, setStatus] = useState<'idle' | 'uploading' | 'analyzing' | 'error'>('idle');
+  const [error, setError] = useState('');
+  const [rationale, setRationale] = useState('');
+
+  function addFiles(list: FileList | File[]) {
+    const arr = Array.from(list).filter(f => f.size <= 25 * 1024 * 1024);
+    setFiles(f => [...f, ...arr]);
+  }
+
+  async function analyze() {
+    if (files.length === 0) return;
+    setStatus('uploading'); setError('');
+    const paths: string[] = [];
+    for (const file of files) {
+      const data = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result as string);
+        r.onerror = () => reject(r.error);
+        r.readAsDataURL(file);
+      });
+      const resp = await fetch('/api/chat/upload', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: file.name, type: file.type, data }),
+      });
+      const json = await resp.json();
+      if (!resp.ok || !json.ok) { setStatus('error'); setError(json.error || `Upload failed: ${file.name}`); return; }
+      paths.push(json.path);
+    }
+    setStatus('analyzing');
+    const resp = await fetch('/api/theme/extract', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths, hint: hint.trim() || undefined }),
+    });
+    const json = await resp.json();
+    if (!resp.ok || !json.ok) { setStatus('error'); setError(json.error || 'Analysis failed'); return; }
+    const preset = buildCustomPreset(json.theme);
+    setRationale(json.theme.rationale || '');
+    applyTheme(preset);
+    onCreated(preset);
+  }
+
+  const busy = status === 'uploading' || status === 'analyzing';
+
+  return (
+    <div className="theme-engine__builder">
+      <div className="theme-engine__builder-title">Create from your brand</div>
+      <div className="theme-engine__builder-hint">
+        Drop your logo, brand guidelines (PDF), or a screenshot of your existing app.
+        Claude will read them and generate a matching theme.
+      </div>
+      <div
+        className="theme-engine__drop"
+        onDragOver={e => e.preventDefault()}
+        onDrop={e => { e.preventDefault(); if (e.dataTransfer.files) addFiles(e.dataTransfer.files); }}
+        onClick={() => {
+          const inp = document.createElement('input');
+          inp.type = 'file'; inp.multiple = true;
+          inp.onchange = () => { if (inp.files) addFiles(inp.files); };
+          inp.click();
+        }}
+      >
+        {files.length === 0
+          ? <span style={{ color: 'var(--color-text-muted)' }}>Drop files or click to browse</span>
+          : <div className="theme-engine__files">
+              {files.map((f, i) => (
+                <span key={i} className="theme-engine__file-chip">
+                  {f.type.startsWith('image/') ? '🖼' : f.type.includes('pdf') ? '📄' : '📎'} {f.name}
+                  <button onClick={e => { e.stopPropagation(); setFiles(fs => fs.filter((_, j) => j !== i)); }}>×</button>
+                </span>
+              ))}
+            </div>
+        }
+      </div>
+      <input
+        className="theme-engine__hint-input"
+        placeholder="Optional: any brand color codes or vibe hints…"
+        value={hint}
+        onChange={e => setHint(e.target.value)}
+        disabled={busy}
+      />
+      <div className="theme-engine__builder-actions">
+        <button onClick={onCancel} disabled={busy} className="theme-engine__builder-cancel">Cancel</button>
+        <button onClick={analyze} disabled={busy || files.length === 0} className="theme-engine__builder-go">
+          {status === 'uploading' ? 'Uploading…' : status === 'analyzing' ? 'Analyzing…' : 'Analyze & Apply'}
+        </button>
+      </div>
+      {error && <div className="theme-engine__builder-error">{error}</div>}
+      {rationale && <div className="theme-engine__builder-rationale">{rationale}</div>}
+    </div>
+  );
+}
+
 export function ThemeEngine({ onClose }: { onClose: () => void }) {
-  const [active, setActive] = useState(() => {
-    return localStorage.getItem('venture-os-theme') || 'dark';
-  });
+  const [active, setActive] = useState(() => localStorage.getItem('venture-os-theme') || 'dark');
+  const [customPresets, setCustomPresets] = useState<ThemePreset[]>([]);
+  const [builderOpen, setBuilderOpen] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/theme/custom').then(r => r.json()).then(data => {
+      const specs: CustomThemeSpec[] = data.themes || [];
+      setCustomPresets(specs.map(buildCustomPreset));
+    }).catch(() => {});
+  }, []);
 
   function selectPreset(preset: ThemePreset) {
     applyTheme(preset);
     setActive(preset.id);
   }
 
+  const allPresets = [...PRESETS, ...customPresets];
+
   return (
     <div className="theme-engine" onClick={onClose}>
       <div className="theme-engine__box" onClick={e => e.stopPropagation()}>
         <div className="theme-engine__title">Theme Engine</div>
         <div className="theme-engine__presets">
-          {PRESETS.map(p => (
+          {allPresets.map(p => (
             <button
               key={p.id}
               className={`theme-engine__preset ${active === p.id ? 'theme-engine__preset--active' : ''}`}
@@ -196,7 +359,25 @@ export function ThemeEngine({ onClose }: { onClose: () => void }) {
               <span>{p.name}</span>
             </button>
           ))}
+          <button
+            className="theme-engine__preset theme-engine__preset--add"
+            onClick={() => setBuilderOpen(v => !v)}
+            title="Create a theme from your brand assets"
+          >
+            <div className="theme-engine__preview theme-engine__preview--add">+</div>
+            <span>{builderOpen ? 'Close' : 'Custom'}</span>
+          </button>
         </div>
+        {builderOpen && (
+          <CustomThemeBuilder
+            onCreated={p => {
+              setCustomPresets(cs => [...cs, p]);
+              setActive(p.id);
+              setBuilderOpen(false);
+            }}
+            onCancel={() => setBuilderOpen(false)}
+          />
+        )}
         <div style={{ fontSize: 10, color: 'var(--color-text-muted)', fontFamily: 'var(--font-family-mono)', marginTop: 12 }}>
           Theme persists across sessions
         </div>

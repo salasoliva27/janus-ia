@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
-import type { DashboardState, DashboardActions, Project, ToolStatus, BrainNode, BrainEdge, Notification, Learning, CalendarSlot, FileActivity, CenterView, Document, AgentInfo, MemoryEntry, SessionChatState, ChatMessage } from './types/dashboard';
+import type { DashboardState, DashboardActions, Project, ToolStatus, BrainNode, BrainEdge, Notification, Learning, CalendarSlot, FileActivity, CenterView, Document, AgentInfo, MemoryEntry, SessionChatState, ChatMessage, MemoryIndex } from './types/dashboard';
 import type { ServerMessage } from './types/bridge';
 
 // ── Static Data (real project state, not simulated) ────────
@@ -273,24 +273,65 @@ function deriveLegacy(sessions: Record<string, SessionChatState>) {
   };
 }
 
-// Persist key session state across reloads
-const SESSION_STORAGE_KEY = 'venture-os-session';
+// Persist key session state across reloads.
+// v2: full chatSessions map, no TTL (backend persists the claude session id,
+// so the frontend transcript must live as long as the backend session does).
+const SESSION_STORAGE_KEY = 'venture-os-session-v2';
+const LEGACY_STORAGE_KEY = 'venture-os-session';
+const MAX_SAVED_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days — hard ceiling to bound localStorage growth
+
+function cleanSessionForPersist(s: SessionChatState): SessionChatState {
+  // Don't persist transient status — reload should always return to a stable idle state
+  return {
+    messages: s.messages,
+    thinking: false,
+    status: s.status === 'thinking' || s.status === 'streaming' ? 'done' : s.status,
+    thinkingStart: null,
+    siblingUpdates: s.siblingUpdates.slice(0, 5),
+  };
+}
+
 function loadPersistedState(): Partial<DashboardState> | null {
   try {
     const raw = localStorage.getItem(SESSION_STORAGE_KEY);
-    if (!raw) return null;
+    if (!raw) {
+      // One-time migration from the legacy single-session key
+      const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+      if (legacy) {
+        const saved = JSON.parse(legacy);
+        // Legacy stored only session-0 flat — hydrate into chatSessions shape
+        if (saved.chatMessages) {
+          return {
+            ...saved,
+            chatSessions: {
+              'session-0': {
+                messages: saved.chatMessages,
+                thinking: false,
+                status: 'done',
+                thinkingStart: null,
+                siblingUpdates: [],
+              },
+            },
+          };
+        }
+        return saved;
+      }
+      return null;
+    }
     const saved = JSON.parse(raw);
-    // Only restore if saved within last 2 hours
-    if (saved._savedAt && Date.now() - saved._savedAt > 2 * 60 * 60 * 1000) return null;
+    if (saved._savedAt && Date.now() - saved._savedAt > MAX_SAVED_AGE_MS) return null;
     return saved;
   } catch { return null; }
 }
 function persistState(s: DashboardState) {
   try {
+    const cleanedSessions: Record<string, SessionChatState> = {};
+    for (const [sid, session] of Object.entries(s.chatSessions)) {
+      cleanedSessions[sid] = cleanSessionForPersist(session);
+    }
     const toSave = {
-      chatMessages: s.chatMessages,
+      chatSessions: cleanedSessions,
       chatAuth: s.chatAuth,
-      chatStatus: s.chatStatus === 'thinking' || s.chatStatus === 'streaming' ? 'done' : s.chatStatus,
       memories: s.memories,
       sessionEvents: s.sessionEvents.slice(0, 30),
       agentCounts: s.agentCounts,
@@ -336,25 +377,24 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       centerView: 'constellation',
       commandPaletteOpen: false,
       scoreboardOpen: false,
-      chatSessions: {
-        [DEFAULT_SESSION]: emptySessionChat(
-          (p?.chatMessages as ChatMessage[]) || [
-            { id: 'sys-1', role: 'system', content: 'Initializing...', timestamp: Date.now() },
-          ],
-        ),
+      chatSessions: (p?.chatSessions as Record<string, SessionChatState>) || {
+        [DEFAULT_SESSION]: emptySessionChat([
+          { id: 'sys-1', role: 'system', content: 'Initializing...', timestamp: Date.now() },
+        ]),
       },
-      chatMessages: (p?.chatMessages as ChatMessage[]) || [
-        { id: 'sys-1', role: 'system', content: 'Initializing...', timestamp: Date.now() },
-      ],
+      chatMessages: ((p?.chatSessions as Record<string, SessionChatState>)?.[DEFAULT_SESSION]?.messages)
+        || (p?.chatMessages as ChatMessage[])
+        || [{ id: 'sys-1', role: 'system', content: 'Initializing...', timestamp: Date.now() }],
       chatInput: '',
       chatThinking: false,
       chatAuth: (p?.chatAuth as string) || null,
-      chatStatus: (p?.chatStatus as any) || 'idle',
+      chatStatus: 'idle',
       chatThinkingStart: null,
       activeDocumentId: null,
       rightPanelTab: 'memory',
       agentCounts: (p?.agentCounts as Record<string, number>) || {},
       projectCounts: (p?.projectCounts as Record<string, number>) || {},
+      memoryIndex: null,
     };
   });
 
@@ -364,6 +404,63 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     clearTimeout(persistTimer.current);
     persistTimer.current = setTimeout(() => persistState(state), 500);
   }, [state]);
+
+  // ── Fetch auto-memory index (shown in chat header) ────
+  useEffect(() => {
+    let cancelled = false;
+    async function loadMemory() {
+      try {
+        const resp = await fetch('/api/memory/index');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (cancelled) return;
+        const idx: MemoryIndex = {
+          entries: data.entries || [],
+          indexContent: data.indexContent || '',
+          dir: data.dir || '',
+          fetchedAt: Date.now(),
+        };
+        setState(s => ({ ...s, memoryIndex: idx }));
+      } catch { /* backend may be warming up */ }
+    }
+    loadMemory();
+    const interval = setInterval(loadMemory, 30_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
+  // ── On session resume: check which sessions have persisted claude ids ──
+  // When the main session has a persisted backend session, inject a
+  // "session resumed" memory pulse so the user sees continuity.
+  const resumeChecked = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const sid = DEFAULT_SESSION;
+    if (resumeChecked.current.has(sid)) return;
+    resumeChecked.current.add(sid);
+    fetch(`/api/session/${sid}`)
+      .then(r => r.json())
+      .then(data => {
+        if (!data.persisted || !data.claudeSessionId) return;
+        setState(s => {
+          // Only inject if session has no prior user/assistant messages this load
+          const current = s.chatSessions[sid] || emptySessionChat();
+          const hasRealMsgs = current.messages.some(m => m.role === 'user' || m.role === 'assistant');
+          if (hasRealMsgs) return s;
+          const resumeMsg: ChatMessage = {
+            id: uid(),
+            role: 'memory',
+            content: `Resumed previous session (${data.turnCount} prior turns) — Claude will remember the prior conversation.`,
+            timestamp: Date.now(),
+            memoryAction: 'resume',
+            memoryRef: data.claudeSessionId,
+          };
+          const chatSessions = updateSession(s.chatSessions, sid, ss => ({
+            ...ss, messages: [...ss.messages, resumeMsg],
+          }));
+          return { ...s, chatSessions, ...deriveLegacy(chatSessions) };
+        });
+      })
+      .catch(() => {});
+  }, []);
 
   // ── Fetch real graph data from bridge API ────────────
   useEffect(() => {
@@ -452,9 +549,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             }
           }
 
-          // Extract memories from memory/vault tool calls
+          // Extract memories from memory/vault tool calls + emit inline chat pulses
           const input = msg.input as Record<string, unknown> | undefined;
           let memories = s.memories;
+          const memoryPulses: ChatMessage[] = [];
           if (input && msg.toolName.startsWith('mcp__janus-memory__')) {
             const action = msg.toolName.split('__').pop();
             if (action === 'remember') {
@@ -464,11 +562,37 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
               if (content) {
                 const mem: MemoryEntry = { id: uid(), type: memType, direction: 'out', content, project, timestamp: Date.now() };
                 memories = [mem, ...memories].slice(0, 100);
+                memoryPulses.push({
+                  id: uid(), role: 'memory', memoryAction: 'remember',
+                  memoryRef: (input.name as string) || content.slice(0, 60),
+                  content: content.length > 140 ? content.slice(0, 137) + '...' : content,
+                  timestamp: Date.now(),
+                });
               }
             } else if (action === 'recall') {
               const query = (input.query as string) || (input.name as string) || 'recall';
               const mem: MemoryEntry = { id: uid(), type: 'recall', direction: 'in', content: query, timestamp: Date.now() };
               memories = [mem, ...memories].slice(0, 100);
+              memoryPulses.push({
+                id: uid(), role: 'memory', memoryAction: 'recall',
+                memoryRef: query,
+                content: `recalling "${query}"`,
+                timestamp: Date.now(),
+              });
+            }
+          }
+          // Pulse when auto-memory files are read/written directly via Read/Write
+          if (input && (msg.toolName === 'Read' || msg.toolName === 'Write' || msg.toolName === 'Edit')) {
+            const p = (input.file_path || input.path || '') as string;
+            if (typeof p === 'string' && p.includes('/.claude/projects/') && p.includes('/memory/') && p.endsWith('.md')) {
+              const file = p.split('/').pop() || p;
+              memoryPulses.push({
+                id: uid(), role: 'memory',
+                memoryAction: msg.toolName === 'Read' ? 'read' : 'write',
+                memoryRef: file,
+                content: `${msg.toolName === 'Read' ? 'read' : 'wrote'} ${file}`,
+                timestamp: Date.now(),
+              });
             }
           }
           if (input && msg.toolName.startsWith('mcp__obsidian-vault__')) {
@@ -569,7 +693,21 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             }
           }
 
-          return { ...s, tools, terminalLines, sessionEvents, brainEdges, memories, learnings, documents, activeDocumentId, rightPanelTab, agentCounts, projectCounts };
+          // Append memory pulses to the originating session's chat stream
+          let chatSessions = s.chatSessions;
+          if (memoryPulses.length > 0) {
+            const pulseSid = (msg as any).sessionId || DEFAULT_SESSION;
+            chatSessions = updateSession(chatSessions, pulseSid, ss => ({
+              ...ss, messages: [...ss.messages, ...memoryPulses],
+            }));
+          }
+
+          return {
+            ...s, tools, terminalLines, sessionEvents, brainEdges, memories, learnings,
+            documents, activeDocumentId, rightPanelTab, agentCounts, projectCounts,
+            chatSessions,
+            ...(memoryPulses.length > 0 ? deriveLegacy(chatSessions) : {}),
+          };
         });
 
         // Deactivate tool pulse after 800ms
