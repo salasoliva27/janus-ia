@@ -84,6 +84,23 @@ function windowReducer(state: WindowLayout, action: WindowAction): WindowLayout 
       return recomputeBounds(updated);
     }
 
+    case 'RESIZE':
+      return {
+        ...state,
+        windows: state.windows.map(w =>
+          w.id === action.id
+            ? {
+                ...w,
+                x: action.x,
+                y: action.y,
+                width: Math.max(action.width, w.minWidth),
+                height: Math.max(action.height, w.minHeight),
+                maximized: false,
+              }
+            : w
+        ),
+      };
+
     case 'MINIMIZE':
       return {
         ...state,

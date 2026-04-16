@@ -48,7 +48,8 @@ export interface WindowLayout {
 
 export type WindowAction =
   | { type: 'SNAP'; id: string; slot: SlotId }
-  | { type: 'TAKEOVER'; id: string; slot: SlotId }  // swap with occupant
+  | { type: 'TAKEOVER'; id: string; slot: SlotId }
+  | { type: 'RESIZE'; id: string; x: number; y: number; width: number; height: number }
   | { type: 'MINIMIZE'; id: string }
   | { type: 'RESTORE'; id: string }
   | { type: 'CLOSE'; id: string }
@@ -60,6 +61,48 @@ export type WindowAction =
   | { type: 'RESIZE_COLUMNS'; columnWidths: [number, number, number] }
   | { type: 'RESIZE_ROWS'; rowHeights: [number, number] }
   | { type: 'RESET' };
+
+// Magnetic snap constants
+export const SNAP_THRESHOLD = 15;    // px — attract when edge within this distance
+export const RELEASE_THRESHOLD = 40; // px — must drag this far from snap to break free
+
+/** Find snap targets for an edge among other windows */
+export function findSnapEdges(
+  windows: WindowState[],
+  excludeId: string,
+): { lefts: number[]; rights: number[]; tops: number[]; bottoms: number[] } {
+  const lefts: number[] = [];
+  const rights: number[] = [];
+  const tops: number[] = [];
+  const bottoms: number[] = [];
+  for (const w of windows) {
+    if (w.id === excludeId || w.minimized) continue;
+    lefts.push(w.x);
+    rights.push(w.x + w.width);
+    tops.push(w.y);
+    bottoms.push(w.y + w.height);
+  }
+  return { lefts, rights, tops, bottoms };
+}
+
+/** Snap a value to the nearest edge if within threshold, with release hysteresis */
+export function snapValue(
+  val: number,
+  edges: number[],
+  wasSnapped: boolean,
+): { snapped: number; isSnapped: boolean } {
+  const threshold = wasSnapped ? RELEASE_THRESHOLD : SNAP_THRESHOLD;
+  let closest = val;
+  let minDist = Infinity;
+  for (const e of edges) {
+    const d = Math.abs(val - e);
+    if (d < minDist) { minDist = d; closest = e; }
+  }
+  if (minDist <= threshold) {
+    return { snapped: closest, isSnapped: true };
+  }
+  return { snapped: val, isSnapped: false };
+}
 
 // Lineage depth -> oklch color
 export const LINEAGE_COLORS = [
