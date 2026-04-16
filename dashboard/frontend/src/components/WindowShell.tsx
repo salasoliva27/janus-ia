@@ -14,8 +14,8 @@ import { CalendarPanel } from './CalendarPanel';
 import { RightPanel } from './RightPanel';
 import { ToolPulseBar } from './ToolPulseBar';
 import { BottomPanel } from './BottomPanel';
-import { lineageColor } from '../types/window';
-import type { WindowState } from '../types/window';
+import { lineageColor, ALL_SLOTS } from '../types/window';
+import type { WindowState, SlotId } from '../types/window';
 
 function CenterContent() {
   const { centerView } = useDashboard();
@@ -77,20 +77,19 @@ export function WindowShell() {
       const color = lineageColor(depth);
       const parentLabel = 'Main';
 
-      // Create new chat window offset from center
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
+      // Find first empty slot for the forked chat
+      const occupiedSlots = new Set(layout.windows.filter(w => !w.minimized).map(w => w.slot));
+      const emptySlot = ALL_SLOTS.find(s => !occupiedSlots.has(s)) || 'left-bottom' as SlotId;
+
       const newWin: WindowState = {
         id: `win-chat-${detail.sessionId}`,
         title: detail.label || `Fork`,
         type: 'chat',
-        x: Math.round(vw * 0.15 + Math.random() * 100),
-        y: Math.round(vh * 0.1 + Math.random() * 60),
-        width: Math.round(vw * 0.28),
-        height: Math.round(vh * 0.65),
-        minWidth: 260,
-        minHeight: 200,
-        zIndex: 0, // will be set by ADD
+        slot: emptySlot,
+        x: 0, y: 0, width: 0, height: 0, // computed by recomputeBounds
+        minWidth: 200,
+        minHeight: 150,
+        zIndex: 0,
         minimized: false,
         maximized: false,
         visible: true,

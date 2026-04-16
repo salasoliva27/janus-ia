@@ -1,4 +1,4 @@
-/* ── Window Manager ── */
+/* ── Window Manager (slot-based grid) ── */
 
 .wm-shell {
   display: flex;
@@ -21,20 +21,37 @@
   position: absolute;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--border-color, oklch(0.35 0.02 240));
-  border-radius: 6px;
   background: var(--color-bg-secondary, oklch(0.18 0.01 240));
-  box-shadow: 0 2px 12px oklch(0 0 0 / 0.4);
   overflow: hidden;
   transition: box-shadow 0.15s ease;
+  box-sizing: border-box;
 }
 
-.wm-window:hover {
+/* Unlocked: visible borders + gap effect */
+.wm-window:not(.wm-window--locked) {
+  border: 1px solid var(--border-color, oklch(0.35 0.02 240));
+  border-radius: 6px;
+  margin: 2px;
+  box-shadow: 0 2px 12px oklch(0 0 0 / 0.4);
+}
+
+.wm-window:not(.wm-window--locked):hover {
   box-shadow: 0 4px 20px oklch(0 0 0 / 0.5);
+}
+
+/* Locked: seamless tiling, thin separator lines */
+.wm-window--locked {
+  border: none;
+  border-radius: 0;
+  border-right: 1px solid oklch(0.25 0.01 240);
+  border-bottom: 1px solid oklch(0.25 0.01 240);
+  box-shadow: none;
 }
 
 .wm-window--maximized {
   border-radius: 0;
+  border: none !important;
+  margin: 0 !important;
 }
 
 /* ── Titlebar ── */
@@ -46,7 +63,7 @@
   height: 28px;
   padding: 0 8px;
   background: var(--color-bg-surface, oklch(0.22 0.01 240));
-  border-bottom: 1px solid var(--border-color, oklch(0.35 0.02 240));
+  border-bottom: 1px solid oklch(0.25 0.01 240);
   cursor: grab;
   user-select: none;
   flex-shrink: 0;
@@ -64,6 +81,16 @@
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
+}
+
+.wm-window__slot-badge {
+  font-family: var(--font-family-mono, monospace);
+  font-size: 9px;
+  color: oklch(0.45 0.02 240);
+  background: oklch(0.18 0.01 240);
+  padding: 1px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
 }
 
 .wm-window__lineage {
@@ -91,21 +118,10 @@
   opacity: 0.7;
 }
 
-.wm-window__btn:hover {
-  opacity: 1;
-}
-
-.wm-window__btn--min {
-  background: oklch(0.80 0.18 85); /* yellow */
-}
-
-.wm-window__btn--max {
-  background: oklch(0.72 0.20 145); /* green */
-}
-
-.wm-window__btn--close {
-  background: oklch(0.65 0.25 25); /* red */
-}
+.wm-window__btn:hover { opacity: 1; }
+.wm-window__btn--min { background: oklch(0.80 0.18 85); }
+.wm-window__btn--max { background: oklch(0.72 0.20 145); }
+.wm-window__btn--close { background: oklch(0.65 0.25 25); }
 
 /* ── Content ── */
 
@@ -115,50 +131,51 @@
   overflow: auto;
 }
 
-/* ── Resize handles ── */
+/* ── Resize handles (column + row dividers) ── */
 
 .wm-resize {
   position: absolute;
+  z-index: 10;
 }
 
-.wm-resize--n {
-  top: -3px; left: 6px; right: 6px; height: 6px;
-  cursor: n-resize;
+/* Column resize: vertical strip on right edge */
+.wm-resize--col {
+  right: -3px;
+  top: 28px; /* below titlebar */
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
 }
 
-.wm-resize--s {
-  bottom: -3px; left: 6px; right: 6px; height: 6px;
-  cursor: s-resize;
+.wm-resize--col:hover,
+.wm-resize--col:active {
+  background: oklch(0.78 0.16 180 / 0.3);
 }
 
-.wm-resize--e {
-  right: -3px; top: 6px; bottom: 6px; width: 6px;
-  cursor: e-resize;
+/* Row resize: horizontal strip on bottom edge */
+.wm-resize--row {
+  bottom: -3px;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: row-resize;
 }
 
-.wm-resize--w {
-  left: -3px; top: 6px; bottom: 6px; width: 6px;
-  cursor: w-resize;
+.wm-resize--row:hover,
+.wm-resize--row:active {
+  background: oklch(0.78 0.16 180 / 0.3);
 }
 
-.wm-resize--ne {
-  top: -3px; right: -3px; width: 12px; height: 12px;
-  cursor: ne-resize;
-}
+/* ── Drop highlight (shown during drag) ── */
 
-.wm-resize--nw {
-  top: -3px; left: -3px; width: 12px; height: 12px;
-  cursor: nw-resize;
-}
-
-.wm-resize--se {
-  bottom: -3px; right: -3px; width: 12px; height: 12px;
-  cursor: se-resize;
-}
-
-.wm-resize--sw {
-  bottom: -3px; left: -3px; width: 12px; height: 12px;
-  cursor: sw-resize;
+.wm-drop-highlight {
+  position: fixed;
+  background: oklch(0.78 0.16 180 / 0.12);
+  border: 2px dashed oklch(0.78 0.16 180 / 0.5);
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 9999;
+  transition: all 0.1s ease;
 }
 
 /* ── Taskbar ── */
@@ -211,9 +228,7 @@
   border-style: dashed;
 }
 
-.wm-taskbar__item--minimized:hover {
-  opacity: 1;
-}
+.wm-taskbar__item--minimized:hover { opacity: 1; }
 
 .wm-taskbar__icon {
   font-size: 12px;
@@ -241,6 +256,28 @@
   flex-shrink: 0;
 }
 
+.wm-taskbar__lock {
+  font-family: var(--font-family-mono, monospace);
+  font-size: 10px;
+  padding: 2px 8px;
+  border: 1px solid var(--border-color, oklch(0.35 0.02 240));
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text-muted, oklch(0.65 0.02 240));
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.wm-taskbar__lock--active {
+  background: oklch(0.78 0.16 180 / 0.15);
+  border-color: oklch(0.78 0.16 180 / 0.4);
+  color: oklch(0.78 0.16 180);
+}
+
+.wm-taskbar__lock:hover {
+  border-color: oklch(0.78 0.16 180);
+}
+
 .wm-taskbar__reset {
   font-family: var(--font-family-mono, monospace);
   font-size: 10px;
@@ -250,7 +287,6 @@
   background: transparent;
   color: var(--color-text-muted, oklch(0.65 0.02 240));
   cursor: pointer;
-  transition: color 0.1s;
 }
 
 .wm-taskbar__reset:hover {

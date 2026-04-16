@@ -21,13 +21,31 @@ const EVENT_COLORS: Record<string, string> = {
   push: '#f87171',
 };
 
+function timeAgoShort(ts: number): string {
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 5) return 'now';
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  return `${Math.floor(s / 86400)}d`;
+}
+
+const EVENT_ICONS: Record<string, string> = {
+  edit: 'E',
+  commit: 'C',
+  dispatch: 'D',
+  memory: 'M',
+  tool: 'T',
+  push: 'P',
+};
+
 function SessionTimeline() {
   const { sessionEvents } = useDashboard();
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (containerRef.current) {
-      containerRef.current.scrollLeft = 0;
+      containerRef.current.scrollLeft = containerRef.current.scrollWidth;
     }
   }, [sessionEvents.length]);
 
@@ -37,18 +55,17 @@ function SessionTimeline() {
 
   return (
     <div ref={containerRef} className="session-timeline">
-      {sessionEvents.slice(0, 40).map((ev, i) => {
+      {sessionEvents.slice(0, 50).map((ev, i) => {
         const color = EVENT_COLORS[ev.type] || '#888';
         return (
-          <div key={ev.id} style={{ display: 'contents' }}>
-            {i > 0 && <div className="session-timeline__line" />}
-            <div className="session-timeline__event" title={`${ev.type}: ${ev.label}`}>
-              <div
-                className="session-timeline__dot"
-                style={{ background: color, boxShadow: `0 0 6px ${color}60` }}
-              />
-              <div className="session-timeline__label">{ev.label}</div>
+          <div key={ev.id} className="session-timeline__card" style={{ borderLeftColor: color }}>
+            <div className="session-timeline__card-header">
+              <span className="session-timeline__card-icon" style={{ background: color }}>{EVENT_ICONS[ev.type] || '?'}</span>
+              <span className="session-timeline__card-type">{ev.type}</span>
+              <span className="session-timeline__card-time">{timeAgoShort(ev.timestamp)}</span>
             </div>
+            <div className="session-timeline__card-label">{ev.label}</div>
+            {ev.project && <div className="session-timeline__card-project">{ev.project}</div>}
           </div>
         );
       })}
