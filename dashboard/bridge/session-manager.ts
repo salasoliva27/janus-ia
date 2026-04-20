@@ -20,7 +20,7 @@ export class SessionManager {
     this.ws = ws;
   }
 
-  createSession(sessionId: string): ClaudeSession {
+  createSession(sessionId: string, agentId: string = "claude"): ClaudeSession {
     if (this.sessions.size >= MAX_CONCURRENT) {
       this.send({ type: "error", message: `Max ${MAX_CONCURRENT} concurrent sessions reached`, sessionId });
       // Return a dummy — caller should check
@@ -29,7 +29,7 @@ export class SessionManager {
     }
 
     const pm = new PermissionManager();
-    const session = new ClaudeSession(this.ws, pm, sessionId);
+    const session = new ClaudeSession(this.ws, pm, sessionId, agentId);
     this.sessions.set(sessionId, {
       session,
       parentId: null,

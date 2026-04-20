@@ -103,12 +103,11 @@ except Exception as e:
       ;;
     FRESH:*)
       HOURS="${ANCHOR_AGE#FRESH:}"
-      echo "  Session anchor: ✓ most-recent-context is ${HOURS}h old — LOAD IT FIRST"
+      echo "  Session anchor: ✓ most-recent-context (${HOURS}h old) — injected below"
       ;;
     STALE:*)
       HOURS="${ANCHOR_AGE#STALE:}"
-      echo "  Session anchor: ⚠ most-recent-context is ${HOURS}h old (>48h stale)"
-      echo "    → Previous session may not have written one before ending."
+      echo "  Session anchor: ⚠ most-recent-context is ${HOURS}h old (>48h stale) — injected below"
       ;;
   esac
 else
@@ -126,12 +125,34 @@ LEARNING_COUNT=$(find "$WORKSPACE/learnings" -name "*.md" 2>/dev/null | wc -l)
 AGENT_COUNT=$(find "$WORKSPACE/agents" -name "*.md" 2>/dev/null | wc -l)
 echo "  Concepts: ${CONCEPT_COUNT} | Learnings: ${LEARNING_COUNT} | Agents: ${AGENT_COUNT}"
 
+# ─── Skill integrity check ─────────────────────────────────────
+# skills/registry.md claims INSTALLED — verify ~/.claude/skills/ isn't empty.
+# Codespace ephemerality repeatedly wipes installs and the registry doesn't know.
+mkdir -p "$HOME/.claude/skills" 2>/dev/null || true
+SKILL_DIR_COUNT=$( { find "$HOME/.claude/skills" -maxdepth 1 -mindepth 1 -type d 2>/dev/null || true; } | wc -l)
+REGISTRY_CLAIMS=$(grep -c "^### .* INSTALLED\|INSTALLED 2026" "$WORKSPACE/skills/registry.md" 2>/dev/null || echo 0)
+if [ "${REGISTRY_CLAIMS:-0}" -gt 0 ] && [ "${SKILL_DIR_COUNT:-0}" -eq 0 ]; then
+  echo "  ⚠ Skills: registry claims ${REGISTRY_CLAIMS} installed, but ~/.claude/skills/ is EMPTY"
+  echo "    → Codespace ephemerality likely wiped them. Re-install via the registry entries, or update the registry."
+else
+  echo "  Installed skills: ${SKILL_DIR_COUNT} dirs in ~/.claude/skills/"
+fi
+
 # Check PROJECTS.md exists and has content
 if [ -f "$WORKSPACE/PROJECTS.md" ]; then
   PROJ_LINES=$(wc -l < "$WORKSPACE/PROJECTS.md")
   echo "  PROJECTS.md: ✓ (${PROJ_LINES} lines)"
 else
   echo "  PROJECTS.md: ✗ MISSING"
+fi
+
+
+# ─── Vault plasticity check ───────────────────────────────────
+# Diagnostic 2026-04-20: most agents/concepts are append-only (del/add
+# ratio ~0). Surface append-only files so /evolve knows what to rewrite.
+APPEND_ONLY=$( { cd "$WORKSPACE" && git log --since="30 days ago" --numstat --pretty=format: -- agents/ concepts/ 2>/dev/null || true; } | awk 'NF==3 {add[$3]+=$1; del[$3]+=$2} END {n=0; for (f in add) if (add[f]>=40 && del[f]==0) n++; print n}')
+if [ "${APPEND_ONLY:-0}" -gt 0 ]; then
+  echo "  ⚠ Vault plasticity: ${APPEND_ONLY} agent/concept files are append-only (30d) — consider /evolve to rewrite"
 fi
 
 echo ""
@@ -177,8 +198,8 @@ echo ""
 # ─── 5. PROTOCOL REMINDER ─────────────────────────────────────
 echo "▸ SESSION PROTOCOL CHECKLIST"
 echo "  ✓ Permission mode: Full Auto (default)"
-echo "  □ recall() recent work across projects"
-echo "  □ Check for corrections from previous sessions"
+echo "  ✓ Most-recent-context — auto-injected below"
+echo "  ✓ Recent corrections — auto-injected below"
 echo "  □ Cross-synthesis: legal, market, tech, capacity"
 echo "  □ Respond to user"
 echo ""
@@ -194,3 +215,90 @@ echo " DO NOT SKIP THESE PROTOCOLS. They exist because you"
 echo " skipped them for 30 days and lost all learning."
 echo "════════════════════════════════════════════════════════════"
 echo ""
+
+# ─── 6. AUTO-INJECT MOST-RECENT-CONTEXT + RECENT CORRECTIONS ──
+# This is what replaces the "□ recall() recent work" checkbox — the content
+# lands directly in context so there's nothing to remember to fetch.
+if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_KEY" ]; then
+
+  # Full content of the freshest most-recent-context handoff (if any)
+  ANCHOR_CONTENT=$(curl -s -m 5 \
+    "${SUPABASE_URL}/rest/v1/memories?select=content,created_at&metadata=cs.%7B%22tags%22:%5B%22most-recent-context%22%5D%7D&workspace=eq.janus-ia&order=created_at.desc&limit=1" \
+    -H "apikey: ${SUPABASE_KEY}" \
+    -H "Authorization: Bearer ${SUPABASE_KEY}" 2>/dev/null || echo "[]")
+
+  ANCHOR_FOUND=$(echo "$ANCHOR_CONTENT" | python3 -c "
+import json, sys
+try:
+    data = json.loads(sys.stdin.read())
+    print('yes' if isinstance(data, list) and data else 'no')
+except Exception:
+    print('no')
+" 2>/dev/null)
+
+  # Fallback: if no tagged anchor, grab the most recent session-type memory
+  # for this workspace. Safety net for sessions that ended abnormally
+  # (crash / force-quit / context-full before the stop-gate could enforce).
+  if [ "$ANCHOR_FOUND" = "no" ]; then
+    ANCHOR_CONTENT=$(curl -s -m 5 \
+      "${SUPABASE_URL}/rest/v1/memories?select=content,created_at&type=eq.session&workspace=eq.janus-ia&order=created_at.desc&limit=1" \
+      -H "apikey: ${SUPABASE_KEY}" \
+      -H "Authorization: Bearer ${SUPABASE_KEY}" 2>/dev/null || echo "[]")
+    ANCHOR_IS_FALLBACK=1
+  else
+    ANCHOR_IS_FALLBACK=0
+  fi
+
+  echo "$ANCHOR_CONTENT" | ANCHOR_IS_FALLBACK="$ANCHOR_IS_FALLBACK" python3 -c "
+import json, os, sys
+try:
+    data = json.loads(sys.stdin.read())
+    if isinstance(data, list) and data:
+        rec = data[0]
+        fallback = os.environ.get('ANCHOR_IS_FALLBACK') == '1'
+        print('')
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+        header = '▸ MOST-RECENT-CONTEXT' if not fallback else '▸ SESSION-MEMORY FALLBACK  (no most-recent-context tag found)'
+        print(f'{header}  (written {rec[\"created_at\"][:19]}Z)')
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+        if fallback:
+            print('⚠ Previous session did NOT write a `most-recent-context`-tagged handoff.')
+            print('⚠ Showing the most recent session-type memory as a fallback.')
+            print('⚠ This may be incomplete — verify with Jano before assuming state.')
+            print('')
+        print(rec['content'].strip())
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+        print('')
+except Exception:
+    pass
+" 2>/dev/null
+
+  # Last 3 corrections — the rules learned from prior failures
+  CORRECTIONS=$(curl -s -m 5 \
+    "${SUPABASE_URL}/rest/v1/memories?select=content,created_at&type=eq.correction&workspace=eq.janus-ia&order=created_at.desc&limit=3" \
+    -H "apikey: ${SUPABASE_KEY}" \
+    -H "Authorization: Bearer ${SUPABASE_KEY}" 2>/dev/null || echo "[]")
+
+  echo "$CORRECTIONS" | python3 -c "
+import json, sys
+try:
+    data = json.loads(sys.stdin.read())
+    if isinstance(data, list) and data:
+        print('▸ RECENT CORRECTIONS (do not repeat)')
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+        for i, rec in enumerate(data, 1):
+            date = rec['created_at'][:10]
+            # Strip the 'CORRECTION:' prefix if present. Print in full — the
+            # RULE sits at the end of the body and truncation loses the point.
+            body = rec['content'].strip()
+            if body.startswith('CORRECTION:'):
+                body = body[len('CORRECTION:'):].strip()
+            print(f'[{i}] {date}')
+            print(body)
+            print('')
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+        print('')
+except Exception:
+    pass
+" 2>/dev/null
+fi

@@ -927,11 +927,19 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const onPalette = () => toggleCommandPalette();
     const onScoreboard = () => toggleScoreboard();
+    const onAgentChange = (e: Event) => {
+      const agentId = (e as CustomEvent).detail?.agentId;
+      if (!agentId) return;
+      const send = wsSendRef.current;
+      if (send) send({ type: 'set_agent', sessionId: DEFAULT_SESSION, agentId });
+    };
     window.addEventListener('venture-os:toggle-palette', onPalette);
     window.addEventListener('venture-os:toggle-scoreboard', onScoreboard);
+    window.addEventListener('venture-os:agent-change', onAgentChange);
     return () => {
       window.removeEventListener('venture-os:toggle-palette', onPalette);
       window.removeEventListener('venture-os:toggle-scoreboard', onScoreboard);
+      window.removeEventListener('venture-os:agent-change', onAgentChange);
     };
   }, [toggleCommandPalette, toggleScoreboard]);
 
@@ -1043,6 +1051,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     const isMainSession = sid === DEFAULT_SESSION;
     const isActive = isMainSession ? hasActiveSession.current : activeSessionIds.current.has(sid);
 
+    const agentId = localStorage.getItem('venture-os-agent') || 'claude';
+
     if (!isActive) {
       // Include sibling context for forked sessions
       let enrichedPrompt = trimmed;
@@ -1053,11 +1063,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           .join('\n');
         enrichedPrompt = `[Context from sibling sessions]\n${siblingContext}\n[End sibling context]\n\n${trimmed}`;
       }
-      send({ type: 'start', prompt: enrichedPrompt, cwd: '/workspaces/janus-ia', sessionId: sid });
+      send({ type: 'start', prompt: enrichedPrompt, cwd: '/workspaces/janus-ia', sessionId: sid, agentId });
       if (isMainSession) hasActiveSession.current = true;
       else activeSessionIds.current.add(sid);
     } else {
-      send({ type: 'follow_up', prompt: trimmed, sessionId: sid });
+      send({ type: 'follow_up', prompt: trimmed, sessionId: sid, agentId });
     }
   }, [state.chatSessions]);
 

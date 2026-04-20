@@ -5,6 +5,7 @@ import type { ClientMessage, ServerMessage } from "./types.js";
 import { isValidClientMessage } from "./types.js";
 import { SessionManager } from "./session-manager.js";
 import { PermissionManager } from "./permissions.js";
+import { listAgentAvailability } from "./agent-registry.js";
 import { startWatchers, stopWatchers, broadcastInitialLearnings } from "./file-watcher.js";
 import type { FSWatcher } from "chokidar";
 import fs from "node:fs";
@@ -422,6 +423,13 @@ export function startServer(port: number): Promise<http.Server> {
     }
   });
 
+  // Agents API — lists available CLI-based coding agents and whether each is
+  // ready to use (env var present, CLI on PATH isn't checked here — the bridge
+  // surfaces a runtime error if the spawn fails).
+  app.get("/api/agents", (_req, res) => {
+    res.json({ agents: listAgentAvailability() });
+  });
+
   // Memory API — exposes auto-memory index so chat can show "what's loaded"
   app.get("/api/memory/index", (_req, res) => {
     try {
@@ -716,26 +724,36 @@ Do not include anything except the JSON object.`;
 
       switch (msg.type) {
         case "start": {
-          console.log(`[ws:${sid}] session start requested:`, msg.prompt.slice(0, 80));
-          // Get or create session
+          const agentId = (msg.agentId as string | undefined) || "claude";
+          console.log(`[ws:${sid}/${agentId}] session start requested:`, msg.prompt.slice(0, 80));
           let session = sessionManager.getSession(sid);
           if (session) {
-            session.close();
+            // Switch agent if needed — otherwise close+recreate only if agent actually changed
+            if (session.getAgent() !== agentId) session.setAgent(agentId);
+            else session.close();
+          } else {
+            session = sessionManager.createSession(sid, agentId);
           }
-          session = sessionManager.createSession(sid);
           session.start(msg.prompt, msg.cwd || "/workspaces/janus-ia").catch((err) => {
             console.error(`[ws:${sid}] session error:`, err);
           });
           break;
         }
         case "follow_up": {
+          const agentId = (msg.agentId as string | undefined);
           console.log(`[ws:${sid}] follow-up requested:`, msg.prompt.slice(0, 80));
           const session = sessionManager.getSession(sid);
           if (session) {
+            if (agentId && session.getAgent() !== agentId) session.setAgent(agentId);
             session.followUp(msg.prompt).catch((err) => {
               console.error(`[ws:${sid}] follow-up error:`, err);
             });
           }
+          break;
+        }
+        case "set_agent": {
+          const session = sessionManager.getSession(sid);
+          if (session) session.setAgent(msg.agentId);
           break;
         }
         case "permission_response": {

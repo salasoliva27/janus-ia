@@ -25,6 +25,17 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /workspaces/janus-ia/scripts/dispatch-reminder.sh",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }

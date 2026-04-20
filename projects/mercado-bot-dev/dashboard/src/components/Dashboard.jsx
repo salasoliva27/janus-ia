@@ -1074,7 +1074,7 @@ export default function Dashboard() {
             'anthropic-dangerous-direct-browser-access': 'true',
           },
           body: JSON.stringify({
-            model: 'claude-opus-4-6',
+            model: 'claude-opus-4-7',
             max_tokens: 1200,
             messages: [{
               role: 'user',

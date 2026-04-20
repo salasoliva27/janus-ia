@@ -775,7 +775,7 @@ const data = {
       name:"INFRASTRUCTURE", type:"infra", desc:"Shared services used across all projects",
       children:[
         {name:"Supabase", type:"infra", desc:"Single instance (rycybujjedtofghigyxm). eb_, nutria_, janus_, ozum_ table prefixes. Auth + DB for all products."},
-        {name:"Anthropic API", type:"infra", desc:"claude-sonnet-4-6 standard across all projects. claude-opus-4-6 for nutrIA streaming."},
+        {name:"Anthropic API", type:"infra", desc:"claude-opus-4-7 standard across all projects and dashboards."},
         {name:"Bitso Sandbox", type:"infra", desc:"MXN→ETH quote + payment rails for espacio-bosques. Licensed IFPE — the Ley Fintech solution."},
         {name:"GitHub", type:"infra", desc:"All repos under salasoliva27. venture-os is the brain repo. Product repos are separate."},
         {name:"Dotfiles", type:"infra", desc:"salasoliva27/dotfiles — single source for all API keys. Auto-loaded into every Codespace. Never store secrets in product repos."},

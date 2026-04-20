@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useDashboard } from '../store';
+import { useActiveTheme } from './ThemeEngine';
 import type { ConnectionStatus } from '../hooks/useWebSocket';
 import type { ServerMessage } from '../types/bridge';
 
@@ -125,6 +126,100 @@ function StatusRing({ status, processing }: { status: ConnectionStatus; processi
   );
 }
 
+interface AgentInfo {
+  id: string;
+  label: string;
+  envVar: string | null;
+  available: boolean;
+  authMethod: 'oauth' | 'api-key';
+  reason?: string;
+}
+
+function AgentPicker({ onCredentials }: { onCredentials?: () => void }) {
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [active, setActive] = useState<string>(() => localStorage.getItem('venture-os-agent') || 'claude');
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const r = await fetch('/api/agents');
+        const j = await r.json();
+        if (!cancelled && Array.isArray(j.agents)) setAgents(j.agents);
+      } catch { /* bridge warming up */ }
+    }
+    load();
+    const i = setInterval(load, 15_000);
+    return () => { cancelled = true; clearInterval(i); };
+  }, []);
+
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  function pick(id: string) {
+    localStorage.setItem('venture-os-agent', id);
+    setActive(id);
+    setOpen(false);
+    // Broadcast so the store can pick it up without prop-drilling
+    window.dispatchEvent(new CustomEvent('venture-os:agent-change', { detail: { agentId: id } }));
+  }
+
+  const activeAgent = agents.find(a => a.id === active);
+  const activeLabel = activeAgent?.label || 'Claude Code';
+
+  return (
+    <div ref={ref} className="agent-picker">
+      <button
+        className="agent-picker__btn"
+        onClick={() => setOpen(v => !v)}
+        title={activeAgent?.reason || `Agent: ${activeLabel}`}
+      >
+        <span className="agent-picker__dot" style={{
+          background: activeAgent?.available === false ? 'oklch(0.65 0.2 25)' : 'var(--color-accent)',
+        }} />
+        <span>{activeLabel}</span>
+        <span className="agent-picker__caret">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="agent-picker__menu">
+          {agents.length === 0 && <div className="agent-picker__empty">loading…</div>}
+          {agents.map(a => (
+            <button
+              key={a.id}
+              className={`agent-picker__item ${a.id === active ? 'agent-picker__item--active' : ''} ${!a.available ? 'agent-picker__item--disabled' : ''}`}
+              onClick={() => a.available && pick(a.id)}
+              disabled={!a.available}
+            >
+              <span className="agent-picker__item-dot" style={{
+                background: a.available ? 'var(--color-accent)' : 'oklch(0.65 0.2 25)',
+              }} />
+              <span className="agent-picker__item-label">{a.label}</span>
+              {!a.available && a.envVar && (
+                <span className="agent-picker__item-missing">
+                  needs {a.envVar}
+                  {onCredentials && (
+                    <span
+                      className="agent-picker__item-connect"
+                      onClick={(e) => { e.stopPropagation(); setOpen(false); onCredentials(); }}
+                    >Connect</span>
+                  )}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function NotificationBell() {
   const { notifications, dismissNotification } = useDashboard();
   const [open, setOpen] = useState(false);
@@ -227,6 +322,7 @@ function ContextUsage() {
 export function TopBar({ connectionStatus, onThemeToggle, lastMessage, onCredentials }: { connectionStatus: ConnectionStatus; onThemeToggle?: () => void; lastMessage: ServerMessage | null; onCredentials?: () => void }) {
   const { gitCommits, agents } = useDashboard();
   const processing = agents.some(a => a.status === 'executing' || a.status === 'thinking');
+  const theme = useActiveTheme();
 
   // Group recent commits by repo, show latest per repo
   const repoCommits = new Map<string, typeof gitCommits[0]>();
@@ -236,6 +332,9 @@ export function TopBar({ connectionStatus, onThemeToggle, lastMessage, onCredent
 
   return (
     <div className="top-bar">
+      {theme?.logo && (
+        <img className="top-bar__brand-logo" src={theme.logo} alt={`${theme.name} logo`} />
+      )}
       <div className="top-bar__git-lanes">
         {Array.from(repoCommits.entries()).slice(0, 5).map(([repo, commit]) => (
           <div key={repo} className="top-bar__git-lane">
@@ -251,6 +350,7 @@ export function TopBar({ connectionStatus, onThemeToggle, lastMessage, onCredent
         )}
       </div>
       <div className="top-bar__right">
+        <AgentPicker onCredentials={onCredentials} />
         {onThemeToggle && (
           <button
             onClick={onThemeToggle}

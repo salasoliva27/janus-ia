@@ -2,11 +2,12 @@
 
 // Client -> Server messages
 export type ClientMessage =
-  | { type: "start"; prompt: string; cwd?: string; sessionId?: string }
-  | { type: "follow_up"; prompt: string; sessionId?: string }
+  | { type: "start"; prompt: string; cwd?: string; sessionId?: string; agentId?: string }
+  | { type: "follow_up"; prompt: string; sessionId?: string; agentId?: string }
   | { type: "permission_response"; id: string; allowed: boolean; sessionId?: string }
   | { type: "interrupt"; sessionId?: string }
-  | { type: "fork"; parentSessionId: string; newSessionId: string; forkLabel: string; forkMessageIndex: number };
+  | { type: "fork"; parentSessionId: string; newSessionId: string; forkLabel: string; forkMessageIndex: number }
+  | { type: "set_agent"; sessionId?: string; agentId: string };
 
 // Server -> Client messages
 export type ServerMessage =
@@ -32,7 +33,7 @@ export interface PendingPermission {
 }
 
 // Type guard for ClientMessage validation
-const CLIENT_MESSAGE_TYPES = new Set(["start", "follow_up", "permission_response", "interrupt", "fork"]);
+const CLIENT_MESSAGE_TYPES = new Set(["start", "follow_up", "permission_response", "interrupt", "fork", "set_agent"]);
 
 export function isValidClientMessage(data: unknown): data is ClientMessage {
   if (typeof data !== "object" || data === null) return false;
@@ -53,6 +54,8 @@ export function isValidClientMessage(data: unknown): data is ClientMessage {
         && typeof msg.newSessionId === "string"
         && typeof msg.forkLabel === "string"
         && typeof msg.forkMessageIndex === "number";
+    case "set_agent":
+      return typeof msg.agentId === "string";
     default:
       return false;
   }

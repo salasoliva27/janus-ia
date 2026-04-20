@@ -74,6 +74,33 @@ except:
 " 2>/dev/null)
 
 if [ "$HAS_ANCHOR" = "True" ]; then
+  # Anchor exists — now check memory VOLUME for today.
+  # Correction fbcef958 (2026-04-16): "write learnings INLINE, not in a batch at end."
+  # Without a volume check, sessions write only the handoff and skip learnings.
+  COUNT_RESP=$(curl -s -m 5 \
+    "${SUPABASE_URL}/rest/v1/memories?select=id&created_at=gte.${TODAY}&workspace=eq.janus-ia" \
+    -H "apikey: ${SUPABASE_KEY}" \
+    -H "Authorization: Bearer ${SUPABASE_KEY}" 2>/dev/null || echo "[]")
+
+  MEMORY_COUNT=$(echo "$COUNT_RESP" | python3 -c "
+import json, sys
+try:
+    data = json.loads(sys.stdin.read())
+    print(len(data) if isinstance(data, list) else 0)
+except:
+    print(0)
+" 2>/dev/null)
+
+  if [ "${MEMORY_COUNT:-0}" -lt 3 ]; then
+    cat <<EOF
+{
+  "decision": "block",
+  "reason": "STOP-GATE: Only ${MEMORY_COUNT} memories written today for workspace=janus-ia. CLAUDE.md mandates min 3 per session and correction fbcef958 (2026-04-16) requires INLINE learning, not batched. Before ending this session you MUST call \`mcp__memory__remember\` at least $((3 - MEMORY_COUNT)) more time(s) capturing: a learning (surprising discovery, non-obvious bug fix, or tool verdict), a decision (architecture/business/tooling), or a pattern (repeats across 2+ projects). Write them NOW, then return control. If the session genuinely had nothing worth capturing, write a memory saying exactly that with type='session' — but that's rare."
+}
+EOF
+    exit 0
+  fi
+
   exit 0
 fi
 

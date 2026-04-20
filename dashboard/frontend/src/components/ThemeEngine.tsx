@@ -4,6 +4,7 @@ interface ThemePreset {
   id: string;
   name: string;
   vars: Record<string, string>;
+  logo?: string;
 }
 
 const PRESETS: ThemePreset[] = [
@@ -127,6 +128,24 @@ const PRESETS: ThemePreset[] = [
     },
   },
   {
+    id: 'reece',
+    name: 'Reece',
+    logo: '/themes/reece-logo.png',
+    vars: {
+      '--color-bg-primary': 'oklch(0.22 0.055 252)',
+      '--color-bg-secondary': 'oklch(0.26 0.06 252)',
+      '--color-bg-surface': 'oklch(0.30 0.065 252)',
+      '--color-bg-elevated': 'oklch(0.34 0.07 252)',
+      '--color-bg-inset': 'oklch(0.18 0.05 252)',
+      '--color-text-primary': 'oklch(0.97 0.005 252)',
+      '--color-text-secondary': 'oklch(0.80 0.02 252)',
+      '--color-text-muted': 'oklch(0.62 0.025 252)',
+      '--color-text-on-accent': 'oklch(0.20 0.05 252)',
+      '--color-accent': 'oklch(0.92 0.02 252)',
+      '--border-color': 'oklch(0.40 0.06 252)',
+    },
+  },
+  {
     id: 'ember',
     name: 'Ember',
     vars: {
@@ -149,6 +168,8 @@ const PRESETS: ThemePreset[] = [
 // so light-only adjustments (softer shadows, darker borders) can kick in.
 const LIGHT_THEMES = new Set(['bone', 'sand', 'arctic']);
 
+const themeListeners = new Set<() => void>();
+
 function applyTheme(preset: ThemePreset) {
   const root = document.documentElement;
   for (const [key, value] of Object.entries(preset.vars)) {
@@ -157,6 +178,7 @@ function applyTheme(preset: ThemePreset) {
   root.setAttribute('data-theme', preset.id);
   root.setAttribute('data-theme-tone', LIGHT_THEMES.has(preset.id) ? 'light' : 'dark');
   localStorage.setItem('venture-os-theme', preset.id);
+  themeListeners.forEach(l => l());
 }
 
 // ── Custom theme synthesis ────────────────────────────────
@@ -208,6 +230,27 @@ interface CustomThemeSpec {
   id: string; name: string; mode: 'light' | 'dark';
   primaryHue: number; accentHue: number; chroma: number;
   rationale?: string; createdAt?: number;
+}
+
+export function useActiveTheme(): ThemePreset | null {
+  const [id, setId] = useState<string>(() =>
+    document.documentElement.getAttribute('data-theme')
+    || localStorage.getItem('venture-os-theme')
+    || 'dark'
+  );
+  const [customs, setCustoms] = useState<ThemePreset[]>([]);
+  useEffect(() => {
+    const update = () => setId(document.documentElement.getAttribute('data-theme') || 'dark');
+    themeListeners.add(update);
+    return () => { themeListeners.delete(update); };
+  }, []);
+  useEffect(() => {
+    fetch('/api/theme/custom').then(r => r.json()).then(data => {
+      const specs: CustomThemeSpec[] = data.themes || [];
+      setCustoms(specs.map(buildCustomPreset));
+    }).catch(() => {});
+  }, []);
+  return [...PRESETS, ...customs].find(p => p.id === id) || null;
 }
 
 export function useThemeInit() {
