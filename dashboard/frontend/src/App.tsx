@@ -7,8 +7,9 @@ import { PortfolioScoreboard } from './components/PortfolioScoreboard';
 import { CrossProjectFlash } from './components/CrossProjectFlash';
 import { ThemeEngine, useThemeInit } from './components/ThemeEngine';
 import { Credentials } from './components/Credentials';
+import { McpConfig } from './components/McpConfig';
 import { LearningToast } from './components/LearningToast';
-import { DashboardProvider, useBridgeHandler, useRegisterWsSend } from './store';
+import { DashboardProvider, useBridgeHandler, useRegisterWsSend, useConnectionStateSync } from './store';
 import { useWebSocket } from './hooks/useWebSocket';
 import type { ServerMessage } from './types/bridge';
 
@@ -43,8 +44,10 @@ function DashboardInner() {
   const { status, lastMessage, send } = useWebSocket();
   const handleBridgeMessage = useBridgeHandler();
   const registerWsSend = useRegisterWsSend();
+  const { onConnectionLost, onConnectionRestored } = useConnectionStateSync();
   const [themeOpen, setThemeOpen] = useState(false);
   const [credentialsOpen, setCredentialsOpen] = useState(false);
+  const [mcpOpen, setMcpOpen] = useState(false);
 
   useThemeInit();
 
@@ -62,6 +65,13 @@ function DashboardInner() {
     }
   }, [status, send, registerWsSend]);
 
+  // When the bridge drops mid-turn, demote stuck thinking/streaming sessions
+  // so the UI stops showing "responding" when nothing is coming back.
+  useEffect(() => {
+    if (status === 'disconnected') onConnectionLost();
+    else if (status === 'connected') onConnectionRestored();
+  }, [status, onConnectionLost, onConnectionRestored]);
+
   // Theme shortcut: Ctrl+T
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -76,7 +86,7 @@ function DashboardInner() {
 
   return (
     <div className="shell-outer">
-      <TopBar connectionStatus={status} onThemeToggle={() => setThemeOpen(true)} lastMessage={lastMessage} onCredentials={() => setCredentialsOpen(true)} />
+      <TopBar connectionStatus={status} onThemeToggle={() => setThemeOpen(true)} lastMessage={lastMessage} onCredentials={() => setCredentialsOpen(true)} onMcpConfig={() => setMcpOpen(true)} />
       <div className="shell-panels">
         <WindowManagerProvider>
           <WindowShell />
@@ -87,6 +97,7 @@ function DashboardInner() {
       <CrossProjectFlash />
       {themeOpen && <ThemeEngine onClose={() => setThemeOpen(false)} />}
       {credentialsOpen && <Credentials onClose={() => setCredentialsOpen(false)} />}
+      {mcpOpen && <McpConfig onClose={() => setMcpOpen(false)} />}
       <LearningToast />
       <ReloadBanner />
     </div>

@@ -1,8 +1,47 @@
 import { useRef, useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { useDashboard } from '../store';
-import type { ChatMessage } from '../types/dashboard';
+import { useDashboard, detectLanguage } from '../store';
+import type { ChatMessage, Document } from '../types/dashboard';
+
+const TEXT_MIME_PREFIXES = ['text/', 'application/json', 'application/xml', 'application/javascript', 'application/x-sh'];
+function isTextLikeMime(m: string) { return TEXT_MIME_PREFIXES.some(p => m.startsWith(p)); }
+
+async function buildUploadedDoc(file: File, serverPath: string): Promise<Document> {
+  const ext = detectLanguage(file.name);
+  const isImage = file.type.startsWith('image/') || ext === 'image';
+  const isText = !isImage && (isTextLikeMime(file.type) || ['text', 'markdown', 'json', 'yaml', 'toml', 'csv', 'svg', 'xml',
+    'typescript', 'javascript', 'python', 'rust', 'go', 'java', 'bash', 'sql', 'html', 'css', 'scss', 'dotenv'].includes(ext));
+
+  let content = '';
+  let language = ext;
+  if (isImage) {
+    content = await new Promise<string>((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result as string); r.onerror = () => rej(r.error);
+      r.readAsDataURL(file);
+    });
+    language = 'image';
+  } else if (isText) {
+    content = await new Promise<string>((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result as string); r.onerror = () => rej(r.error);
+      r.readAsText(file);
+    });
+    if (language === 'text' && file.name.endsWith('.log')) language = 'text';
+  } else {
+    language = 'binary';
+  }
+  return {
+    id: `upload-${Date.now()}-${file.name}`,
+    path: serverPath,
+    filename: file.name,
+    language,
+    content,
+    timestamp: Date.now(),
+    size: file.size,
+  };
+}
 
 function ToolCallCard({ content }: { content: string }) {
   const [expanded, setExpanded] = useState(false);
@@ -105,11 +144,13 @@ function ElapsedTimer({ start }: { start: number }) {
   return <span>{m > 0 ? `${m}m ${s}s` : `${s}s`}</span>;
 }
 
-const STATUS_CONFIG = {
-  idle: { label: 'ready', color: 'var(--color-text-muted)', dot: 'var(--color-text-muted)' },
-  thinking: { label: 'thinking', color: 'var(--color-accent)', dot: 'var(--color-accent)' },
-  streaming: { label: 'responding', color: 'oklch(0.72 0.18 145)', dot: 'oklch(0.72 0.18 145)' },
-  done: { label: 'done', color: 'var(--color-text-muted)', dot: 'oklch(0.72 0.18 145)' },
+const STATUS_CONFIG: Record<string, { label: string; color: string; dot: string }> = {
+  idle:         { label: 'ready',        color: 'var(--color-text-muted)', dot: 'var(--color-text-muted)' },
+  thinking:     { label: 'thinking',     color: 'var(--color-accent)',     dot: 'var(--color-accent)' },
+  streaming:    { label: 'responding',   color: 'oklch(0.72 0.18 145)',    dot: 'oklch(0.72 0.18 145)' },
+  done:         { label: 'done',         color: 'var(--color-text-muted)', dot: 'oklch(0.72 0.18 145)' },
+  stalled:      { label: 'no activity',  color: 'oklch(0.78 0.18 75)',     dot: 'oklch(0.78 0.18 75)' },
+  disconnected: { label: 'disconnected', color: 'oklch(0.68 0.22 25)',     dot: 'oklch(0.68 0.22 25)' },
 };
 
 interface ChatPanelProps {
@@ -174,8 +215,14 @@ export function ChatPanel({ sessionId = 'session-0', lineageLabel, lineageColor 
     }));
     setAttachments(a => [...a, ...pending]);
     for (const p of pending) {
-      uploadFile(p.file).then(r => {
+      uploadFile(p.file).then(async r => {
         setAttachments(a => a.map(x => x.file === p.file ? { ...x, uploading: false, path: r.path, error: r.error } : x));
+        if (r.path && !r.error) {
+          try {
+            const doc = await buildUploadedDoc(p.file, r.path);
+            dashboard.addUploadedDocument(doc);
+          } catch (e) { console.warn('[uploaded-docs] failed to build preview:', e); }
+        }
       });
     }
   }
@@ -207,6 +254,29 @@ export function ChatPanel({ sessionId = 'session-0', lineageLabel, lineageColor 
       e.preventDefault();
       handleSubmit(e);
     }
+  }
+
+  function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const files: File[] = [];
+    for (const item of Array.from(items)) {
+      if (item.kind === 'file') {
+        const f = item.getAsFile();
+        if (f) {
+          // Clipboard images land as "image.png" — give them a friendlier, unique name.
+          const name = f.name && f.name !== 'image.png'
+            ? f.name
+            : `pasted-${Date.now()}.${(f.type.split('/')[1] || 'png').replace('+xml', '')}`;
+          files.push(new File([f], name, { type: f.type }));
+        }
+      }
+    }
+    if (files.length > 0) {
+      e.preventDefault();
+      acceptFiles(files);
+    }
+    // Plain-text paste falls through to default behavior.
   }
 
   function handleEditMessage(msgId: string) {
@@ -391,12 +461,30 @@ export function ChatPanel({ sessionId = 'session-0', lineageLabel, lineageColor 
           </div>
         ))}
 
-        {/* Thinking indicator — 3 dots */}
-        {chatThinking && (
+        {/* Thinking / streaming indicator — 3 animated dots + elapsed seconds.
+            Stays visible while status is thinking OR streaming so the user
+            always sees the agent is alive (not just during the first blank
+            pause before the first token arrives). */}
+        {(chatThinking || chatStatus === 'streaming' || chatStatus === 'thinking') && (
           <div className="chat-panel__thinking-dots">
             <span className="chat-panel__dot" />
             <span className="chat-panel__dot" />
             <span className="chat-panel__dot" />
+            {chatThinkingStart && (
+              <span className="chat-panel__thinking-elapsed">
+                <ElapsedTimer start={chatThinkingStart} />
+              </span>
+            )}
+          </div>
+        )}
+        {chatStatus === 'stalled' && (
+          <div className="chat-panel__thinking-dots chat-panel__thinking-dots--warn">
+            ⚠ no activity from bridge for &gt; 90s. The turn may be stuck.
+          </div>
+        )}
+        {chatStatus === 'disconnected' && (
+          <div className="chat-panel__thinking-dots chat-panel__thinking-dots--alert">
+            ⚠ bridge disconnected mid-turn. Will auto-reconnect; the previous response is lost.
           </div>
         )}
 
@@ -407,13 +495,19 @@ export function ChatPanel({ sessionId = 'session-0', lineageLabel, lineageColor 
       <div className="chat-panel__input-area">
         <div className="chat-panel__status-bar">
           <span
-            className={`chat-panel__status-dot ${chatStatus === 'thinking' ? 'chat-panel__status-dot--pulse' : ''}`}
+            className={`chat-panel__status-dot ${chatStatus === 'thinking' || chatStatus === 'streaming' ? 'chat-panel__status-dot--pulse' : ''} ${chatStatus === 'stalled' ? 'chat-panel__status-dot--warn' : ''} ${chatStatus === 'disconnected' ? 'chat-panel__status-dot--alert' : ''}`}
             style={{ background: cfg.dot }}
           />
           <span className="chat-panel__status-label" style={{ color: cfg.color }}>
             {cfg.label}
-            {chatStatus === 'thinking' && chatThinkingStart && (
+            {(chatStatus === 'thinking' || chatStatus === 'streaming' || chatStatus === 'stalled') && chatThinkingStart && (
               <> — <ElapsedTimer start={chatThinkingStart} /></>
+            )}
+            {chatStatus === 'stalled' && (
+              <> · no bridge traffic for 90s — interrupt or wait</>
+            )}
+            {chatStatus === 'disconnected' && (
+              <> · bridge dropped mid-turn, auto-reconnecting</>
             )}
           </span>
           {(chatStatus === 'thinking' || chatStatus === 'streaming') && (
@@ -469,7 +563,8 @@ export function ChatPanel({ sessionId = 'session-0', lineageLabel, lineageColor 
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask anything..."
+              onPaste={handlePaste}
+              placeholder="Ask anything, paste images, or drop files…"
               rows={2}
             />
             <button

@@ -128,21 +128,80 @@ const PRESETS: ThemePreset[] = [
     },
   },
   {
+    // Deep navy sampled from the Reece logo block. White surfaces, dark navy
+    // type + accents. Hue ~258 (navy, slightly past pure blue).
     id: 'reece',
     name: 'Reece',
     logo: '/themes/reece-logo.png',
     vars: {
-      '--color-bg-primary': 'oklch(0.22 0.055 252)',
-      '--color-bg-secondary': 'oklch(0.26 0.06 252)',
-      '--color-bg-surface': 'oklch(0.30 0.065 252)',
-      '--color-bg-elevated': 'oklch(0.34 0.07 252)',
-      '--color-bg-inset': 'oklch(0.18 0.05 252)',
-      '--color-text-primary': 'oklch(0.97 0.005 252)',
-      '--color-text-secondary': 'oklch(0.80 0.02 252)',
-      '--color-text-muted': 'oklch(0.62 0.025 252)',
-      '--color-text-on-accent': 'oklch(0.20 0.05 252)',
-      '--color-accent': 'oklch(0.92 0.02 252)',
-      '--border-color': 'oklch(0.40 0.06 252)',
+      '--color-bg-primary': 'oklch(0.99 0.003 258)',
+      '--color-bg-secondary': 'oklch(0.97 0.006 258)',
+      '--color-bg-surface': 'oklch(0.94 0.010 258)',
+      '--color-bg-elevated': 'oklch(0.90 0.016 258)',
+      '--color-bg-inset': 'oklch(0.95 0.007 258)',
+      '--color-text-primary': 'oklch(0.22 0.085 258)',
+      '--color-text-secondary': 'oklch(0.38 0.085 258)',
+      '--color-text-muted': 'oklch(0.54 0.05 258)',
+      '--color-text-on-accent': 'oklch(0.99 0.002 258)',
+      '--color-accent': 'oklch(0.26 0.09 258)',
+      '--border-color': 'oklch(0.82 0.025 258)',
+    },
+  },
+  {
+    // Cool brushed-steel — monochromatic greys with a blue-silver accent.
+    // Low chroma throughout so it reads industrial rather than tinted.
+    id: 'metallic',
+    name: 'Metallic',
+    vars: {
+      '--color-bg-primary': 'oklch(0.16 0.004 240)',
+      '--color-bg-secondary': 'oklch(0.20 0.005 240)',
+      '--color-bg-surface': 'oklch(0.26 0.007 240)',
+      '--color-bg-elevated': 'oklch(0.32 0.009 240)',
+      '--color-bg-inset': 'oklch(0.12 0.003 240)',
+      '--color-text-primary': 'oklch(0.94 0.003 240)',
+      '--color-text-secondary': 'oklch(0.74 0.005 240)',
+      '--color-text-muted': 'oklch(0.52 0.006 240)',
+      '--color-text-on-accent': 'oklch(0.15 0.004 240)',
+      '--color-accent': 'oklch(0.80 0.025 225)',
+      '--border-color': 'oklch(0.30 0.008 240)',
+    },
+  },
+  {
+    // Polished chrome — high-lightness neutrals with a cool steel accent.
+    // Companion to Metallic; same 240 hue, inverted lightness ramp.
+    id: 'chrome',
+    name: 'Chrome',
+    vars: {
+      '--color-bg-primary': 'oklch(0.95 0.004 240)',
+      '--color-bg-secondary': 'oklch(0.98 0.003 240)',
+      '--color-bg-surface': 'oklch(0.91 0.006 240)',
+      '--color-bg-elevated': 'oklch(0.86 0.008 240)',
+      '--color-bg-inset': 'oklch(0.93 0.005 240)',
+      '--color-text-primary': 'oklch(0.22 0.006 240)',
+      '--color-text-secondary': 'oklch(0.40 0.007 240)',
+      '--color-text-muted': 'oklch(0.55 0.006 240)',
+      '--color-text-on-accent': 'oklch(0.98 0.003 240)',
+      '--color-accent': 'oklch(0.48 0.032 230)',
+      '--border-color': 'oklch(0.80 0.008 240)',
+    },
+  },
+  {
+    // Deep cosmic void with nebula accents. Animated starfield renders via
+    // ::before/::after pseudo-elements — see .has-space-backdrop in dashboard.css.
+    id: 'space',
+    name: 'Space',
+    vars: {
+      '--color-bg-primary': 'oklch(0.07 0.02 280)',
+      '--color-bg-secondary': 'oklch(0.10 0.03 275)',
+      '--color-bg-surface': 'oklch(0.14 0.04 275)',
+      '--color-bg-elevated': 'oklch(0.19 0.05 280)',
+      '--color-bg-inset': 'oklch(0.05 0.015 280)',
+      '--color-text-primary': 'oklch(0.95 0.012 290)',
+      '--color-text-secondary': 'oklch(0.72 0.03 285)',
+      '--color-text-muted': 'oklch(0.50 0.04 280)',
+      '--color-text-on-accent': 'oklch(0.08 0.02 280)',
+      '--color-accent': 'oklch(0.74 0.22 330)',
+      '--border-color': 'oklch(0.22 0.04 280)',
     },
   },
   {
@@ -166,7 +225,7 @@ const PRESETS: ThemePreset[] = [
 
 // Light themes render a dark-text-on-light-bg surface; the shell needs to know
 // so light-only adjustments (softer shadows, darker borders) can kick in.
-const LIGHT_THEMES = new Set(['bone', 'sand', 'arctic']);
+const LIGHT_THEMES = new Set(['bone', 'sand', 'arctic', 'reece', 'chrome']);
 
 const themeListeners = new Set<() => void>();
 

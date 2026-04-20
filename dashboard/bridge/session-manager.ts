@@ -14,10 +14,55 @@ interface SessionEntry {
 
 export class SessionManager {
   private sessions = new Map<string, SessionEntry>();
-  private ws: WebSocket;
+  // Multiple tabs can connect simultaneously; each gets a live mirror of
+  // every session's output. Without multiplexing, opening a second tab
+  // silently black-holes messages meant for the first.
+  private clients = new Set<WebSocket>();
+  // Messages emitted while NO clients are attached get queued and flushed on
+  // the next attach. Bounded so a long disconnect doesn't blow memory.
+  private queue: (ServerMessage & { sessionId?: string })[] = [];
+  private readonly QUEUE_LIMIT = 500;
 
-  constructor(ws: WebSocket) {
-    this.ws = ws;
+  constructor(ws?: WebSocket) {
+    if (ws) this.clients.add(ws);
+  }
+
+  /** Add a WebSocket to the broadcast set; flush any pending messages to it. */
+  attachWs(ws: WebSocket): void {
+    this.clients.add(ws);
+    // Keep ClaudeSession's legacy ws ref pointing at a live one for paths
+    // that still read it directly (e.g. read-only status sends).
+    for (const entry of this.sessions.values()) entry.session.setWs(ws);
+    // Flush queued messages so this tab sees what it missed while disconnected.
+    while (this.queue.length > 0 && ws.readyState === 1) {
+      const msg = this.queue.shift()!;
+      try { ws.send(JSON.stringify(msg)); } catch { break; }
+    }
+  }
+
+  /** Remove one WebSocket from the broadcast set — sessions keep running. */
+  detachWs(ws?: WebSocket): void {
+    if (ws) this.clients.delete(ws);
+    else this.clients.clear();
+    // If a client is still attached, point sessions at it so direct ws
+    // references (in legacy code paths) still send successfully.
+    const still = [...this.clients].find(c => c.readyState === 1);
+    for (const entry of this.sessions.values()) entry.session.setWs(still ?? null);
+  }
+
+  /** Emit to every attached client. If none are attached, queue it. */
+  broadcast(msg: ServerMessage & { sessionId?: string }): void {
+    const payload = JSON.stringify(msg);
+    let delivered = 0;
+    for (const ws of this.clients) {
+      if (ws.readyState === 1) {
+        try { ws.send(payload); delivered++; } catch { /* swallow; stale ws */ }
+      }
+    }
+    if (delivered === 0) {
+      this.queue.push(msg);
+      if (this.queue.length > this.QUEUE_LIMIT) this.queue.shift();
+    }
   }
 
   createSession(sessionId: string, agentId: string = "claude"): ClaudeSession {
@@ -29,7 +74,8 @@ export class SessionManager {
     }
 
     const pm = new PermissionManager();
-    const session = new ClaudeSession(this.ws, pm, sessionId, agentId);
+    const firstLive = [...this.clients].find(c => c.readyState === 1) ?? null;
+    const session = new ClaudeSession(firstLive, pm, sessionId, agentId, this);
     this.sessions.set(sessionId, {
       session,
       parentId: null,
@@ -57,7 +103,8 @@ export class SessionManager {
     }
 
     const pm = new PermissionManager();
-    const session = new ClaudeSession(this.ws, pm, newId);
+    const firstLive = [...this.clients].find(c => c.readyState === 1) ?? null;
+    const session = new ClaudeSession(firstLive, pm, newId, "claude", this);
 
     // Inject parent conversation history as context
     const history = parent.session.getConversationLog();
@@ -121,8 +168,6 @@ export class SessionManager {
   }
 
   private send(msg: ServerMessage & { sessionId?: string }): void {
-    if (this.ws.readyState === 1) {
-      this.ws.send(JSON.stringify(msg));
-    }
+    this.broadcast(msg);
   }
 }

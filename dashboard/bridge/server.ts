@@ -11,10 +11,52 @@ import type { FSWatcher } from "chokidar";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { spawn } from "node:child_process";
 
 const WORKSPACE_ROOT = "/workspaces/janus-ia";
 const UPLOADS_DIR = path.join(WORKSPACE_ROOT, "dump", "uploads");
 const THEMES_DIR = path.join(os.homedir(), ".claude", "projects", "-workspaces-janus-ia", "themes");
+
+// Persistent Snowflake connection — auth once at first query, reuse forever.
+// MFA token caching means even a fresh process skips the Duo push for ~4h.
+type SnowflakeConn = Awaited<ReturnType<typeof openSnowflakeConn>>;
+let snowflakeConnPromise: Promise<SnowflakeConn> | null = null;
+
+async function openSnowflakeConn() {
+  const { default: snowflake } = await import("snowflake-sdk");
+  const conn = snowflake.createConnection({
+    account: process.env.SNOWFLAKE_ACCOUNT!,
+    username: process.env.SNOWFLAKE_USER!,
+    password: process.env.SNOWFLAKE_PASSWORD!,
+    warehouse: process.env.SNOWFLAKE_WAREHOUSE,
+    database: process.env.SNOWFLAKE_DATABASE,
+    schema: process.env.SNOWFLAKE_SCHEMA,
+    role: process.env.SNOWFLAKE_ROLE,
+    authenticator: "USERNAME_PASSWORD_MFA",
+    clientRequestMfaToken: true,
+    clientStoreTemporaryCredential: true,
+  } as Parameters<typeof snowflake.createConnection>[0]);
+  await new Promise<void>((resolve, reject) => {
+    conn.connect(err => (err ? reject(err) : resolve()));
+  });
+  return conn;
+}
+
+async function getSnowflakeConn() {
+  if (!snowflakeConnPromise) {
+    snowflakeConnPromise = openSnowflakeConn().catch(err => {
+      snowflakeConnPromise = null;
+      throw err;
+    });
+  }
+  const conn = await snowflakeConnPromise;
+  // Reset cache if the connection died so the next call reconnects
+  if (!conn.isUp()) {
+    snowflakeConnPromise = null;
+    return getSnowflakeConn();
+  }
+  return conn;
+}
 
 function safeFileName(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100);
@@ -153,6 +195,28 @@ export function startServer(port: number): Promise<http.Server> {
     }
   });
 
+  // File API — write a single file. Used by the document editor in the UI.
+  // Path-restricted to /workspaces/ to prevent escapes outside the codespace.
+  app.post("/api/files/write", (req, res) => {
+    const { path: filePath, content } = req.body || {};
+    if (typeof filePath !== "string" || !filePath.startsWith("/workspaces/")) {
+      res.status(400).json({ ok: false, error: "Invalid path — must be under /workspaces/" });
+      return;
+    }
+    if (typeof content !== "string") {
+      res.status(400).json({ ok: false, error: "Missing content (string)" });
+      return;
+    }
+    try {
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, content, "utf8");
+      const stat = fs.statSync(filePath);
+      res.json({ ok: true, path: filePath, size: stat.size, mtime: stat.mtimeMs });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+
   // Calendar API — proxy to Google Calendar (fallback to empty)
   app.get("/api/calendar/events", async (_req, res) => {
     try {
@@ -206,27 +270,12 @@ export function startServer(port: number): Promise<http.Server> {
       }
       try {
         const t0 = Date.now();
-        const { default: snowflake } = await import("snowflake-sdk");
-        const conn = snowflake.createConnection({
-          account: process.env.SNOWFLAKE_ACCOUNT!,
-          username: process.env.SNOWFLAKE_USER!,
-          password: process.env.SNOWFLAKE_PASSWORD!,
-          warehouse: process.env.SNOWFLAKE_WAREHOUSE,
-          database: process.env.SNOWFLAKE_DATABASE,
-          schema: process.env.SNOWFLAKE_SCHEMA,
-          role: process.env.SNOWFLAKE_ROLE,
-        });
-        await new Promise<void>((resolve, reject) => {
-          conn.connect(err => (err ? reject(err) : resolve()));
-        });
+        const conn = await getSnowflakeConn();
         const rows = await new Promise<Record<string, unknown>[]>((resolve, reject) => {
           conn.execute({
             sqlText: query,
             complete: (err, _stmt, rowData) => (err ? reject(err) : resolve((rowData ?? []) as Record<string, unknown>[])),
           });
-        });
-        await new Promise<void>(resolve => {
-          conn.destroy(() => resolve());
         });
         const elapsed = Date.now() - t0;
         const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
@@ -275,6 +324,56 @@ export function startServer(port: number): Promise<http.Server> {
     } catch (err) {
       res.status(500).json({ ok: false, error: String(err) });
     }
+  });
+
+  // MCP config — lists every MCP server declared in .mcp.json, resolves the
+  // env-var references (e.g. ${GITHUB_TOKEN}), and reports which are present
+  // in process.env. Values are NEVER returned — only presence.
+  app.get("/api/mcp/list", (_req, res) => {
+    try {
+      const raw = fs.readFileSync(path.join(WORKSPACE_ROOT, ".mcp.json"), "utf-8");
+      const cfg = JSON.parse(raw) as { mcpServers?: Record<string, unknown> };
+      const servers = cfg.mcpServers || {};
+      const entries = Object.entries(servers).map(([name, rawSpec]) => {
+        const spec = rawSpec as Record<string, unknown>;
+        const envObj = (spec.env as Record<string, string> | undefined) || {};
+        const envVars = Object.entries(envObj).map(([k, v]) => {
+          // Values look like "${VAR_NAME}" — extract the referenced env var name
+          const match = typeof v === "string" ? v.match(/^\$\{([A-Z_][A-Z0-9_]*)\}$/) : null;
+          const sourceVar = match ? match[1] : null;
+          const present = sourceVar ? typeof process.env[sourceVar] === "string" && process.env[sourceVar]!.length > 0 : true;
+          return { key: k, sourceVar, present, literal: !sourceVar };
+        });
+        const missing = envVars.filter(v => !v.present).map(v => v.key);
+        return {
+          name,
+          type: (spec.type as string) || "stdio",
+          command: (spec.command as string) || null,
+          args: (spec.args as string[]) || [],
+          url: (spec.url as string) || null,
+          envVars,
+          status: missing.length === 0 ? "ready" : "needs-env",
+          missing,
+        };
+      });
+      res.json({ ok: true, servers: entries, configPath: path.join(WORKSPACE_ROOT, ".mcp.json") });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+
+  // Credentials status — reports which env vars are currently present on the
+  // bridge. Accepts a whitelist of names from the client; returns `{ name: bool }`.
+  // We never return values — only presence.
+  app.post("/api/credentials/status", (req, res) => {
+    const names = Array.isArray((req.body as any)?.envVars) ? (req.body as any).envVars as unknown[] : [];
+    const out: Record<string, boolean> = {};
+    for (const n of names) {
+      if (typeof n !== "string" || !/^[A-Z_][A-Z0-9_]*$/.test(n)) continue;
+      const v = process.env[n];
+      out[n] = typeof v === "string" && v.trim().length > 0;
+    }
+    res.json({ ok: true, envVars: out });
   });
 
   // Credentials test — validates a credential entry against its provider's API.
@@ -561,6 +660,20 @@ export function startServer(port: number): Promise<http.Server> {
         catch { buf = Buffer.from(data, "utf-8"); }
       }
       fs.writeFileSync(full, buf);
+      // Mirror to Google Drive under Janus_AI/_uploads/<YYYY-MM-DD>/ — async, never blocks.
+      // Skipped silently if GOOGLE_REFRESH_TOKEN is missing. Local path is authoritative.
+      if (process.env.GOOGLE_REFRESH_TOKEN) {
+        const child = spawn(path.join(WORKSPACE_ROOT, "scripts", "gdrive-save"), [full], {
+          stdio: ["ignore", "pipe", "pipe"],
+          env: process.env,
+        });
+        let stderr = "";
+        child.stderr?.on("data", (chunk) => { stderr += chunk.toString(); });
+        child.on("error", (e) => console.error("[gdrive-save] spawn failed:", e.message));
+        child.on("exit", (code) => {
+          if (code !== 0) console.error(`[gdrive-save] exit ${code} for ${filename}:`, stderr.trim());
+        });
+      }
       res.json({ ok: true, path: full, filename, size: buf.length, type: type || "" });
     } catch (err) {
       res.status(500).json({ ok: false, error: String(err) });
@@ -684,6 +797,12 @@ Do not include anything except the JSON object.`;
   const server = http.createServer(app);
   const wss = new WebSocketServer({ server });
 
+  // One SessionManager per bridge process, not per WS connection. This lets
+  // Claude child processes survive browser blips / tab reloads / Codespaces
+  // forwarded-port recycling: the WS detaches cleanly, the CLI keeps running,
+  // and the new connection re-attaches without losing the turn.
+  const sessionManager = new SessionManager();
+
   function broadcast(data: ServerMessage): void {
     const payload = JSON.stringify(data);
     for (const client of wss.clients) {
@@ -703,7 +822,8 @@ Do not include anything except the JSON object.`;
       }
     });
 
-    const sessionManager = new SessionManager(ws);
+    // Re-target existing sessions at the new WS and flush any queued output.
+    sessionManager.attachWs(ws);
 
     ws.on("message", (raw) => {
       let parsed: unknown;
@@ -725,6 +845,7 @@ Do not include anything except the JSON object.`;
       switch (msg.type) {
         case "start": {
           const agentId = (msg.agentId as string | undefined) || "claude";
+          const modelId = msg.modelId as string | undefined;
           console.log(`[ws:${sid}/${agentId}] session start requested:`, msg.prompt.slice(0, 80));
           let session = sessionManager.getSession(sid);
           if (session) {
@@ -734,6 +855,7 @@ Do not include anything except the JSON object.`;
           } else {
             session = sessionManager.createSession(sid, agentId);
           }
+          if (modelId) session.setModel(modelId);
           session.start(msg.prompt, msg.cwd || "/workspaces/janus-ia").catch((err) => {
             console.error(`[ws:${sid}] session error:`, err);
           });
@@ -741,10 +863,12 @@ Do not include anything except the JSON object.`;
         }
         case "follow_up": {
           const agentId = (msg.agentId as string | undefined);
+          const modelId = msg.modelId as string | undefined;
           console.log(`[ws:${sid}] follow-up requested:`, msg.prompt.slice(0, 80));
           const session = sessionManager.getSession(sid);
           if (session) {
             if (agentId && session.getAgent() !== agentId) session.setAgent(agentId);
+            if (modelId) session.setModel(modelId);
             session.followUp(msg.prompt).catch((err) => {
               console.error(`[ws:${sid}] follow-up error:`, err);
             });
@@ -753,7 +877,15 @@ Do not include anything except the JSON object.`;
         }
         case "set_agent": {
           const session = sessionManager.getSession(sid);
-          if (session) session.setAgent(msg.agentId);
+          if (session) {
+            session.setAgent(msg.agentId);
+            if (msg.modelId) session.setModel(msg.modelId);
+          }
+          break;
+        }
+        case "set_model": {
+          const session = sessionManager.getSession(sid);
+          if (session) session.setModel(msg.modelId);
           break;
         }
         case "permission_response": {
@@ -790,8 +922,11 @@ Do not include anything except the JSON object.`;
     });
 
     ws.on("close", () => {
-      console.log("[ws] client disconnected");
-      sessionManager.closeAll();
+      console.log("[ws] client disconnected — sessions keep running, output queues");
+      // Detach ONLY this WS from the broadcast set. Sessions stay alive.
+      // Other open tabs continue receiving. If this was the last tab, the
+      // session's output queues until a new client reconnects.
+      sessionManager.detachWs(ws);
     });
   });
 

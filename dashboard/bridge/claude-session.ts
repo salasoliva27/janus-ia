@@ -74,14 +74,21 @@ export class ClaudeSession {
   private forkContext: string[] | null = null;
   private lastPrompt: string = "";
   private agentId: string = "claude";
+  private modelId: string;
+  private ws: WebSocket | null;
+  private manager: { broadcast: (msg: ServerMessage & { sessionId?: string }) => void } | null;
 
   constructor(
-    private ws: WebSocket,
+    ws: WebSocket | null,
     _permissionManager: unknown,
     private sessionId: string = "session-0",
     agentId: string = "claude",
+    manager: { broadcast: (msg: ServerMessage & { sessionId?: string }) => void } | null = null,
   ) {
+    this.ws = ws;
+    this.manager = manager;
     this.agentId = agentId;
+    this.modelId = getAgent(agentId).defaultModel;
     const persisted = loadPersistedSession(sessionId, agentId);
     this.claudeSessionId = persisted.claudeSessionId;
     this.conversationLog = persisted.conversationLog;
@@ -90,18 +97,38 @@ export class ClaudeSession {
     }
   }
 
-  /** Switch agents — reloads persisted state for the new agent. */
+  /** Swap the active WebSocket target. Called by SessionManager on reconnect. */
+  setWs(ws: WebSocket | null): void {
+    this.ws = ws;
+  }
+
+  /** Switch agents — reloads persisted state for the new agent. Resets model to new agent's default. */
   setAgent(agentId: string): void {
     if (agentId === this.agentId) return;
     this.close();
     this.agentId = agentId;
+    this.modelId = getAgent(agentId).defaultModel;
     const persisted = loadPersistedSession(this.sessionId, agentId);
     this.claudeSessionId = persisted.claudeSessionId;
     this.conversationLog = persisted.conversationLog;
-    console.log(`[session:${this.sessionId}] switched to agent "${agentId}"`);
+    console.log(`[session:${this.sessionId}] switched to agent "${agentId}" (model: ${this.modelId})`);
   }
 
   getAgent(): string { return this.agentId; }
+
+  /** Switch models within the current agent — takes effect on the next turn. */
+  setModel(modelId: string): void {
+    const adapter = getAgent(this.agentId);
+    if (!adapter.models.some(m => m.id === modelId)) {
+      console.warn(`[session:${this.sessionId}/${this.agentId}] unknown model "${modelId}" — ignoring`);
+      return;
+    }
+    if (modelId === this.modelId) return;
+    this.modelId = modelId;
+    console.log(`[session:${this.sessionId}/${this.agentId}] model → ${modelId}`);
+  }
+
+  getModel(): string { return this.modelId; }
 
   /** Whether a persisted Claude session exists (can --continue on next turn) */
   hasPersistedSession(): boolean {
@@ -134,9 +161,10 @@ export class ClaudeSession {
     const spawnSpec = adapter.buildSpawn({
       prompt: fullPrompt,
       continueId: this.claudeSessionId,
+      modelId: this.modelId,
     });
 
-    console.log(`[session:${this.sessionId}/${this.agentId}] spawning ${adapter.cli}...`);
+    console.log(`[session:${this.sessionId}/${this.agentId}] spawning ${adapter.cli} (model: ${this.modelId})...`);
 
     const childEnv: NodeJS.ProcessEnv = { ...process.env };
     for (const key of spawnSpec.envUnset || []) { delete childEnv[key]; }
@@ -150,7 +178,7 @@ export class ClaudeSession {
 
     this.send({
       type: "session_start",
-      auth: adapter.authMethod === "oauth" ? "subscription" : "api-key",
+      auth: adapter.authMethod === "oauth" ? "subscription" : "api_key",
       sessionId: this.sessionId,
     });
 
@@ -170,6 +198,7 @@ export class ClaudeSession {
     let buffer = "";
     let assistantBuffer = "";
     const isStreamJson = spawnSpec.outputFormat === "stream-json";
+    const isCodexJson = spawnSpec.outputFormat === "codex-json";
 
     // Safety timeout — if no output for 120s, kill the process
     this.resetTimeout(proc);
@@ -195,6 +224,14 @@ export class ClaudeSession {
             this.send({ type: "claude_message", message: trimmed, sessionId: this.sessionId });
             assistantBuffer += trimmed;
           }
+        } else if (isCodexJson) {
+          try {
+            const event = JSON.parse(trimmed);
+            const text = this.handleCodexEvent(event);
+            if (text) assistantBuffer += text;
+          } catch {
+            /* ignore malformed codex lines */
+          }
         } else {
           // Plain-text agent: stream each non-empty line as an assistant message
           this.send({ type: "claude_message", message: trimmed, sessionId: this.sessionId });
@@ -203,13 +240,49 @@ export class ClaudeSession {
       }
     });
 
+    // Fatal stderr detection — only surface errors that mean the turn is broken.
+    // Codex especially logs many non-fatal ERROR lines (shell snapshot validation,
+    // debug traces) that would otherwise flood the chat with false alarms.
+    // Also detect retry loops (same error repeated) so the CLI doesn't hang
+    // forever on auth failures without emitting session_end.
+    let lastStderrError = "";
+    let stderrErrorCount = 0;
+    let stderrErrorWindowStart = 0;
+    const FATAL_STDERR_PATTERNS = [
+      /HTTP\s+(4\d\d|5\d\d)/,                    // any 4xx/5xx from an upstream
+      /\b401\s+Unauthorized\b/i,
+      /\b403\s+Forbidden\b/i,
+      /authentication.*(failed|required)/i,
+      /invalid api key|api key.*invalid/i,
+      /\bfatal\b/i,
+      /\bpanic(ked)?\b/i,
+      /command not found/,
+      /permission denied/i,
+      /ENOENT|EACCES|ECONNREFUSED/,
+    ];
     proc.stderr?.on("data", (chunk: Buffer) => {
       const text = chunk.toString().trim();
-      if (text) {
-        console.log(`[session:${this.sessionId}:stderr]`, text);
-        if (text.includes("error") || text.includes("Error") || text.includes("failed")) {
-          this.send({ type: "error", message: text, sessionId: this.sessionId });
+      if (!text) return;
+      console.log(`[session:${this.sessionId}:stderr]`, text);
+      const isFatal = FATAL_STDERR_PATTERNS.some(re => re.test(text));
+      if (!isFatal) return; // informational log — don't promote to chat error
+
+      this.send({ type: "error", message: text, sessionId: this.sessionId });
+
+      // Retry-loop guard: if the same fatal error repeats 3 times within 5s,
+      // the CLI is stuck. Kill it and let close-handler emit session_end.
+      const now = Date.now();
+      const signature = text.slice(0, 120);
+      if (signature === lastStderrError && now - stderrErrorWindowStart < 5_000) {
+        stderrErrorCount++;
+        if (stderrErrorCount >= 3) {
+          console.warn(`[session:${this.sessionId}] killing stuck CLI after ${stderrErrorCount} identical fatal errors`);
+          try { proc.kill("SIGTERM"); } catch { /* already dead */ }
         }
+      } else {
+        lastStderrError = signature;
+        stderrErrorWindowStart = now;
+        stderrErrorCount = 1;
       }
     });
 
@@ -230,6 +303,12 @@ export class ClaudeSession {
             this.send({ type: "claude_message", message: trimmed, sessionId: this.sessionId });
             assistantBuffer += trimmed;
           }
+        } else if (isCodexJson) {
+          try {
+            const event = JSON.parse(trimmed);
+            const text = this.handleCodexEvent(event);
+            if (text) assistantBuffer += text;
+          } catch { /* drop */ }
         } else {
           this.send({ type: "claude_message", message: trimmed, sessionId: this.sessionId });
           assistantBuffer += trimmed;
@@ -338,6 +417,53 @@ export class ClaudeSession {
     }
   }
 
+  // Codex `exec --json` event shape:
+  //   { type: "thread.started", thread_id: "..." }
+  //   { type: "turn.started" }
+  //   { type: "item.started", item: { id, type: "agent_message" | "command_execution" | ..., text?, command? } }
+  //   { type: "item.completed", item: { ... , text? } }
+  //   { type: "turn.completed", usage: { input_tokens, output_tokens, ... } }
+  private handleCodexEvent(event: any): string | null {
+    switch (event.type) {
+      case "thread.started": {
+        if (event.thread_id) {
+          this.claudeSessionId = event.thread_id;
+          console.log(`[session:${this.sessionId}/${this.agentId}] codex thread:`, this.claudeSessionId);
+          persistSession(this.sessionId, this.claudeSessionId, this.conversationLog, this.lastPrompt, this.agentId);
+        }
+        return null;
+      }
+      case "item.completed":
+      case "item.started": {
+        const item = event.item || {};
+        // The assistant's final message
+        if (item.type === "agent_message" && typeof item.text === "string" && item.text.trim()) {
+          // Only emit on completion to avoid duplicating streamed chunks
+          if (event.type === "item.completed") {
+            this.send({ type: "claude_message", message: item.text, sessionId: this.sessionId });
+            return item.text;
+          }
+          return null;
+        }
+        // Tool-like items Codex runs (command execution, reads, etc.)
+        if (item.type === "command_execution" && item.command) {
+          this.send({
+            type: "tool_event",
+            toolName: "bash",
+            input: { command: item.command },
+            sessionId: this.sessionId,
+            timestamp: Date.now(),
+          });
+        }
+        return null;
+      }
+      case "turn.completed":
+      case "turn.started":
+      default:
+        return null;
+    }
+  }
+
   async followUp(prompt: string): Promise<void> {
     await this.start(prompt, WORKSPACE_ROOT);
   }
@@ -357,7 +483,13 @@ export class ClaudeSession {
   }
 
   private send(msg: ServerMessage): void {
-    if (this.ws.readyState === 1 /* OPEN */) {
+    // Prefer the manager — it handles queueing when no client is attached
+    // so browser blips mid-turn don't lose output.
+    if (this.manager) {
+      this.manager.broadcast(msg);
+      return;
+    }
+    if (this.ws && this.ws.readyState === 1 /* OPEN */) {
       this.ws.send(JSON.stringify(msg));
     }
   }

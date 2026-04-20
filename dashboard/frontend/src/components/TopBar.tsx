@@ -126,6 +126,12 @@ function StatusRing({ status, processing }: { status: ConnectionStatus; processi
   );
 }
 
+interface ModelOption {
+  id: string;
+  label: string;
+  note?: string;
+}
+
 interface AgentInfo {
   id: string;
   label: string;
@@ -133,6 +139,8 @@ interface AgentInfo {
   available: boolean;
   authMethod: 'oauth' | 'api-key';
   reason?: string;
+  models: ModelOption[];
+  defaultModel: string;
 }
 
 function AgentPicker({ onCredentials }: { onCredentials?: () => void }) {
@@ -220,6 +228,97 @@ function AgentPicker({ onCredentials }: { onCredentials?: () => void }) {
   );
 }
 
+function ModelPicker() {
+  const [agents, setAgents] = useState<AgentInfo[]>([]);
+  const [activeAgentId, setActiveAgentId] = useState<string>(() => localStorage.getItem('venture-os-agent') || 'claude');
+  const [activeModelId, setActiveModelId] = useState<string>('');
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const r = await fetch('/api/agents');
+        const j = await r.json();
+        if (!cancelled && Array.isArray(j.agents)) setAgents(j.agents);
+      } catch { /* bridge warming up */ }
+    }
+    load();
+    const i = setInterval(load, 30_000);
+    return () => { cancelled = true; clearInterval(i); };
+  }, []);
+
+  // Listen for agent changes so the model dropdown swaps its list
+  useEffect(() => {
+    function onAgentChange(e: Event) {
+      const id = (e as CustomEvent).detail?.agentId;
+      if (id) setActiveAgentId(id);
+    }
+    window.addEventListener('venture-os:agent-change', onAgentChange);
+    return () => window.removeEventListener('venture-os:agent-change', onAgentChange);
+  }, []);
+
+  // Resolve active model once we know the agent + its catalog
+  useEffect(() => {
+    const agent = agents.find(a => a.id === activeAgentId);
+    if (!agent) return;
+    const saved = localStorage.getItem(`venture-os-model-${activeAgentId}`);
+    const valid = saved && agent.models.some(m => m.id === saved) ? saved : agent.defaultModel;
+    setActiveModelId(valid);
+  }, [agents, activeAgentId]);
+
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  function pick(modelId: string) {
+    localStorage.setItem(`venture-os-model-${activeAgentId}`, modelId);
+    setActiveModelId(modelId);
+    setOpen(false);
+    window.dispatchEvent(new CustomEvent('venture-os:model-change', { detail: { modelId, agentId: activeAgentId } }));
+  }
+
+  const agent = agents.find(a => a.id === activeAgentId);
+  const activeModel = agent?.models.find(m => m.id === activeModelId);
+  const activeLabel = activeModel?.label || (agent ? 'select model' : '…');
+
+  if (!agent || agent.models.length === 0) return null;
+
+  return (
+    <div ref={ref} className="agent-picker model-picker">
+      <button
+        className="agent-picker__btn"
+        onClick={() => setOpen(v => !v)}
+        title={activeModel ? `Model: ${activeModel.id}${activeModel.note ? ` — ${activeModel.note}` : ''}` : 'Pick a model'}
+      >
+        <span className="agent-picker__dot" style={{ background: 'var(--color-accent)' }} />
+        <span>{activeLabel}</span>
+        <span className="agent-picker__caret">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="agent-picker__menu">
+          {agent.models.map(m => (
+            <button
+              key={m.id}
+              className={`agent-picker__item ${m.id === activeModelId ? 'agent-picker__item--active' : ''}`}
+              onClick={() => pick(m.id)}
+            >
+              <span className="agent-picker__item-dot" style={{ background: 'var(--color-accent)' }} />
+              <span className="agent-picker__item-label">{m.label}</span>
+              {m.note && <span className="agent-picker__item-missing" style={{ opacity: 0.6 }}>{m.note}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function NotificationBell() {
   const { notifications, dismissNotification } = useDashboard();
   const [open, setOpen] = useState(false);
@@ -295,12 +394,61 @@ function SessionUsage() {
   );
 }
 
+// Per-model context windows. Keep in sync with backend agent registry as
+// new models ship. Falls back to 200k for unknown ids.
+const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
+  'claude-opus-4-7': 1_000_000,
+  'claude-opus-4-6': 1_000_000,
+  'claude-sonnet-4-6': 200_000,
+  'claude-sonnet-4-5': 200_000,
+  'claude-haiku-4-5': 200_000,
+  'gpt-5-codex': 200_000,
+  'gpt-5': 200_000,
+  'gpt-4.1': 1_000_000,
+  'gemini-2.5-pro': 1_000_000,
+  'gemini-2.0-flash': 1_000_000,
+};
+const DEFAULT_CONTEXT_WINDOW = 200_000;
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 10_000) return `${Math.round(n / 1000)}k`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
+  return `${n}`;
+}
+
+function useActiveModelId(): string {
+  const [agentId, setAgentId] = useState(() => localStorage.getItem('venture-os-agent') || 'claude');
+  const [modelId, setModelId] = useState(() => localStorage.getItem(`venture-os-model-${agentId}`) || '');
+  useEffect(() => {
+    function onAgent(e: Event) {
+      const id = (e as CustomEvent).detail?.agentId;
+      if (id) {
+        setAgentId(id);
+        setModelId(localStorage.getItem(`venture-os-model-${id}`) || '');
+      }
+    }
+    function onModel(e: Event) {
+      const id = (e as CustomEvent).detail?.modelId;
+      if (id) setModelId(id);
+    }
+    window.addEventListener('venture-os:agent-change', onAgent);
+    window.addEventListener('venture-os:model-change', onModel);
+    return () => {
+      window.removeEventListener('venture-os:agent-change', onAgent);
+      window.removeEventListener('venture-os:model-change', onModel);
+    };
+  }, []);
+  return modelId;
+}
+
 function ContextUsage() {
   const { chatMessages, tools } = useDashboard();
+  const modelId = useActiveModelId();
 
   // Rough token estimate: ~1 token per 4 chars of content, plus overhead per message/tool call
   const BASE_TOKENS = 20_000; // system prompt + CLAUDE.md
-  const CONTEXT_LIMIT = 1_000_000; // Opus 4.6 1M
+  const CONTEXT_LIMIT = MODEL_CONTEXT_WINDOWS[modelId] ?? DEFAULT_CONTEXT_WINDOW;
   const msgTokens = chatMessages.reduce((sum, m) => {
     const contentTokens = Math.ceil(m.content.length / 4);
     const overhead = m.role === 'assistant' ? 200 : 100;
@@ -312,14 +460,21 @@ function ContextUsage() {
 
   const color = pct > 80 ? 'oklch(0.75 0.2 25)' : pct > 50 ? 'oklch(0.8 0.15 85)' : 'var(--color-text-muted)';
 
+  const limitLabel = formatTokens(CONTEXT_LIMIT);
+  const usedLabel = formatTokens(totalTokens);
+
   return (
-    <span style={{ fontSize: 10, fontFamily: 'var(--font-family-mono)', color }} title={`~${Math.round(totalTokens / 1000)}k / 1M tokens`}>
-      {pct}%
+    <span
+      className="top-bar__tokens"
+      style={{ color }}
+      title={`${totalTokens.toLocaleString()} of ${CONTEXT_LIMIT.toLocaleString()} tokens (${pct}%, limit ${limitLabel}) — ${modelId || 'no model selected'}`}
+    >
+      {usedLabel} Tokens
     </span>
   );
 }
 
-export function TopBar({ connectionStatus, onThemeToggle, lastMessage, onCredentials }: { connectionStatus: ConnectionStatus; onThemeToggle?: () => void; lastMessage: ServerMessage | null; onCredentials?: () => void }) {
+export function TopBar({ connectionStatus, onThemeToggle, lastMessage, onCredentials, onMcpConfig }: { connectionStatus: ConnectionStatus; onThemeToggle?: () => void; lastMessage: ServerMessage | null; onCredentials?: () => void; onMcpConfig?: () => void }) {
   const { gitCommits, agents } = useDashboard();
   const processing = agents.some(a => a.status === 'executing' || a.status === 'thinking');
   const theme = useActiveTheme();
@@ -344,13 +499,15 @@ export function TopBar({ connectionStatus, onThemeToggle, lastMessage, onCredent
           </div>
         ))}
         {repoCommits.size === 0 && (
-          <span style={{ fontSize: 10, color: 'var(--color-text-muted)', fontFamily: 'var(--font-family-mono)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            waiting for commits... <ContextUsage />
+          <span style={{ fontSize: 10, color: 'var(--color-text-muted)', fontFamily: 'var(--font-family-mono)' }}>
+            waiting for commits...
           </span>
         )}
       </div>
+      <ContextUsage />
       <div className="top-bar__right">
         <AgentPicker onCredentials={onCredentials} />
+        <ModelPicker />
         {onThemeToggle && (
           <button
             onClick={onThemeToggle}
@@ -373,6 +530,20 @@ export function TopBar({ connectionStatus, onThemeToggle, lastMessage, onCredent
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+            </svg>
+          </button>
+        )}
+        {onMcpConfig && (
+          <button
+            onClick={onMcpConfig}
+            title="MCP Servers"
+            className="top-bar__icon-btn"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" />
+              <rect x="14" y="14" width="7" height="7" rx="1" />
             </svg>
           </button>
         )}

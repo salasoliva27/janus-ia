@@ -6,7 +6,7 @@ import { ProjectDrillDown } from './ProjectDrillDown';
 import { BrainNodeDrillDown } from './BrainNodeDrillDown';
 
 export function RightPanel() {
-  const { selectedProject, selectedBrainNode, rightPanelTab, setRightPanelTab, documents } = useDashboard();
+  const { selectedProject, selectedBrainNode, rightPanelTab, setRightPanelTab, documents, uploadedDocuments } = useDashboard();
 
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', position: 'relative' }}>
@@ -22,9 +22,18 @@ export function RightPanel() {
           className={`right-panel-tab ${rightPanelTab === 'documents' ? 'right-panel-tab--active' : ''}`}
           onClick={() => setRightPanelTab('documents')}
         >
-          Docs
+          Generated Docs
           {documents.length > 0 && (
             <span className="right-panel-tab__badge">{documents.length}</span>
+          )}
+        </button>
+        <button
+          className={`right-panel-tab ${rightPanelTab === 'uploaded' ? 'right-panel-tab--active' : ''}`}
+          onClick={() => setRightPanelTab('uploaded')}
+        >
+          Uploaded Docs
+          {uploadedDocuments.length > 0 && (
+            <span className="right-panel-tab__badge">{uploadedDocuments.length}</span>
           )}
         </button>
         <button
@@ -38,7 +47,8 @@ export function RightPanel() {
       {/* Content */}
       <div style={{ flex: 1, minHeight: 0 }}>
         {rightPanelTab === 'memory' ? <MemoryRiver /> :
-         rightPanelTab === 'documents' ? <DocumentPreview /> :
+         rightPanelTab === 'documents' ? <DocumentPreview docs={documents} emptyMessage="documents will appear here as Claude creates files" /> :
+         rightPanelTab === 'uploaded' ? <DocumentPreview docs={uploadedDocuments} emptyMessage="attach a file in chat and it will show up here" /> :
          <FileEditor />}
       </div>
 

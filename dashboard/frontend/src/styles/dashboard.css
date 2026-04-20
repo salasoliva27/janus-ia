@@ -122,6 +122,18 @@
   flex-shrink: 0;
 }
 
+.top-bar__tokens {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-family: var(--font-family-mono);
+  letter-spacing: 0.02em;
+  padding: 3px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--color-bg-inset);
+  white-space: nowrap;
+}
+
 .top-bar__icon-btn {
   background: none;
   border: 1px solid var(--border-color, oklch(0.35 0.02 240));
@@ -1056,8 +1068,12 @@
 
 .chat-panel__thinking-dots {
   display: flex;
+  align-items: center;
   gap: 4px;
   padding: 8px 12px;
+  font-family: var(--font-family-mono);
+  font-size: 10.5px;
+  color: var(--color-text-muted);
 }
 .chat-panel__dot {
   width: 6px;
@@ -1068,9 +1084,36 @@
 }
 .chat-panel__dot:nth-child(2) { animation-delay: 0.15s; }
 .chat-panel__dot:nth-child(3) { animation-delay: 0.3s; }
+.chat-panel__thinking-elapsed {
+  margin-left: 8px;
+  font-size: 10px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.chat-panel__thinking-dots--warn {
+  color: oklch(0.78 0.18 75);
+  padding: 10px 12px;
+  font-size: 11px;
+}
+.chat-panel__thinking-dots--alert {
+  color: oklch(0.68 0.22 25);
+  padding: 10px 12px;
+  font-size: 11px;
+}
 @keyframes dotBounce {
   0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
   40% { opacity: 1; transform: scale(1.2); }
+}
+.chat-panel__status-dot--warn {
+  box-shadow: 0 0 12px -2px oklch(0.78 0.18 75 / 0.7);
+}
+.chat-panel__status-dot--alert {
+  box-shadow: 0 0 14px -2px oklch(0.68 0.22 25 / 0.8);
+  animation: statusDotAlert 1s ease-in-out infinite alternate;
+}
+@keyframes statusDotAlert {
+  from { opacity: 0.65; }
+  to   { opacity: 1.0; }
 }
 
 /* ─── Project Grid (Projects tab) ─── */
@@ -3090,6 +3133,14 @@
 .credentials__howto-link:hover {
   text-decoration: underline;
 }
+.credentials__field-hint {
+  font-family: var(--font-family-mono);
+  font-size: 10px;
+  color: var(--color-text-muted);
+  opacity: 0.8;
+  margin: 4px 0 6px 16px;
+  line-height: 1.4;
+}
 .credentials__entry-title {
   display: flex;
   align-items: center;
@@ -3585,4 +3636,315 @@
 .agent-picker__empty {
   padding: 8px 10px; font-size: 10.5px;
   color: var(--color-text-muted); font-style: italic;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SPACE THEME — animated starfield + nebula backdrop
+   Pure CSS, zero JS, zero npm deps. Three parallax star layers +
+   a slow nebula hue drift. Disabled by prefers-reduced-motion.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Space theme: the nebula goes on body's own background (layered gradients
+   + base color), so it paints over anywhere the body is visible. The
+   starfield is a fixed overlay via ::after that sits behind the content. */
+html[data-theme="space"] body {
+  position: relative;
+  overflow-x: hidden;
+  background:
+    radial-gradient(ellipse 90% 60% at 20% 30%, oklch(0.28 0.20 310 / 0.70), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 85% 80%, oklch(0.30 0.16 220 / 0.65), transparent 55%),
+    radial-gradient(ellipse 55% 40% at 65% 15%, oklch(0.22 0.12 160 / 0.50), transparent 60%),
+    var(--color-bg-primary) !important;
+  background-attachment: fixed !important;
+}
+
+/* Any dashboard container that pins itself to --color-bg-primary would
+   otherwise obliterate the nebula. Allow the color to show through with a
+   dimmed filter so cosmic tones remain subtle where panels overlap the bg. */
+html[data-theme="space"] #root {
+  background: transparent !important;
+}
+
+/* Starfield — three twinkling layers on a fixed overlay. Negative z-index
+   in a stacking context containing body ensures it sits behind app content
+   but above body's background. Body content is pinned to z-index 1. */
+html[data-theme="space"] body::before { display: none; }
+html[data-theme="space"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  /* Layer 3 (closest, biggest, brightest) */
+  background:
+    radial-gradient(1.5px 1.5px at 12% 22%, oklch(0.98 0.02 200 / 0.95), transparent 70%),
+    radial-gradient(1.5px 1.5px at 73% 58%, oklch(0.97 0.05 320 / 0.90), transparent 70%),
+    radial-gradient(1.5px 1.5px at 42% 88%, oklch(0.99 0.01 200 / 0.92), transparent 70%),
+    radial-gradient(1.5px 1.5px at 88% 12%, oklch(0.96 0.06 60 / 0.85), transparent 70%),
+    radial-gradient(1.5px 1.5px at 28% 68%, oklch(0.98 0.02 200 / 0.90), transparent 70%),
+    radial-gradient(1.5px 1.5px at 55% 32%, oklch(0.98 0.04 280 / 0.88), transparent 70%),
+    /* Layer 2 (mid) */
+    radial-gradient(1px 1px at 7% 55%, oklch(0.96 0.02 200 / 0.75), transparent 70%),
+    radial-gradient(1px 1px at 82% 28%, oklch(0.96 0.02 200 / 0.70), transparent 70%),
+    radial-gradient(1px 1px at 46% 14%, oklch(0.96 0.02 200 / 0.75), transparent 70%),
+    radial-gradient(1px 1px at 63% 72%, oklch(0.96 0.02 200 / 0.65), transparent 70%),
+    radial-gradient(1px 1px at 18% 92%, oklch(0.96 0.02 200 / 0.75), transparent 70%),
+    radial-gradient(1px 1px at 92% 62%, oklch(0.96 0.02 200 / 0.70), transparent 70%),
+    radial-gradient(1px 1px at 33% 45%, oklch(0.96 0.02 200 / 0.70), transparent 70%),
+    radial-gradient(1px 1px at 77% 82%, oklch(0.96 0.02 200 / 0.70), transparent 70%),
+    /* Layer 1 (far, faint) */
+    radial-gradient(0.5px 0.5px at 3% 12%, oklch(0.92 0.02 200 / 0.45), transparent 70%),
+    radial-gradient(0.5px 0.5px at 22% 38%, oklch(0.92 0.02 200 / 0.45), transparent 70%),
+    radial-gradient(0.5px 0.5px at 38% 62%, oklch(0.92 0.02 200 / 0.45), transparent 70%),
+    radial-gradient(0.5px 0.5px at 52% 8%, oklch(0.92 0.02 200 / 0.45), transparent 70%),
+    radial-gradient(0.5px 0.5px at 67% 52%, oklch(0.92 0.02 200 / 0.45), transparent 70%),
+    radial-gradient(0.5px 0.5px at 84% 42%, oklch(0.92 0.02 200 / 0.45), transparent 70%),
+    radial-gradient(0.5px 0.5px at 98% 88%, oklch(0.92 0.02 200 / 0.45), transparent 70%),
+    radial-gradient(0.5px 0.5px at 15% 78%, oklch(0.92 0.02 200 / 0.45), transparent 70%),
+    radial-gradient(0.5px 0.5px at 48% 98%, oklch(0.92 0.02 200 / 0.45), transparent 70%),
+    radial-gradient(0.5px 0.5px at 72% 18%, oklch(0.92 0.02 200 / 0.45), transparent 70%);
+  animation: space-twinkle 6s ease-in-out infinite alternate;
+}
+
+html[data-theme="space"] body > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Glass-panel treatment: large surfaces that normally use bg-primary become
+   semi-transparent so the nebula + starfield show through. Uses color-mix
+   to keep the theme's dark cosmic base but with 35-40% alpha. Backdrop
+   filter gives a frosted-glass lift. Smaller surfaces (cards, pickers)
+   stay opaque so readability stays high. */
+html[data-theme="space"] .shell-outer,
+html[data-theme="space"] .shell-panels,
+html[data-theme="space"] .window-shell__body {
+  background: transparent !important;
+}
+
+html[data-theme="space"] .chat-panel,
+html[data-theme="space"] .doc-preview,
+html[data-theme="space"] .right-panel-tabs,
+html[data-theme="space"] .window-shell {
+  background: color-mix(in oklch, var(--color-bg-primary) 55%, transparent) !important;
+  backdrop-filter: blur(10px) saturate(120%);
+  -webkit-backdrop-filter: blur(10px) saturate(120%);
+}
+
+html[data-theme="space"] .card {
+  background: color-mix(in oklch, var(--color-bg-surface) 78%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border: 1px solid oklch(0.60 0.12 290 / 0.35);
+  box-shadow: 0 2px 20px -4px oklch(0.15 0.08 290 / 0.6);
+}
+
+/* The model/agent pickers get a soft glow in space so they lift off the sky. */
+html[data-theme="space"] .agent-picker__btn {
+  box-shadow: 0 0 24px -6px oklch(0.74 0.22 330 / 0.35);
+}
+
+/* A thin progress bar that pulses with the accent color — gives a passive
+   "the station is alive" feel while nothing's happening. Opt-in via
+   .space-pulse class; applied to the top-bar context-usage indicator. */
+html[data-theme="space"] .space-pulse::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, oklch(0.74 0.22 330 / 0.5), transparent);
+  animation: space-scan 3.2s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes space-nebula-drift {
+  0%   { transform: translate(0, 0) scale(1); filter: hue-rotate(0deg); }
+  50%  { transform: translate(-3%, 2%) scale(1.05); filter: hue-rotate(15deg); }
+  100% { transform: translate(2%, -3%) scale(1.02); filter: hue-rotate(-10deg); }
+}
+
+@keyframes space-twinkle {
+  0%   { opacity: 0.75; }
+  50%  { opacity: 1.0; }
+  100% { opacity: 0.85; }
+}
+
+@keyframes space-drift {
+  0%   { background-position: 0 0; }
+  100% { background-position: -30% 20%; }
+}
+
+@keyframes space-scan {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme="space"] body::before,
+  html[data-theme="space"] body::after,
+  html[data-theme="space"] .space-pulse::before {
+    animation: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   METALLIC THEME — subtle brushed-steel backdrop gradient
+   ═══════════════════════════════════════════════════════════════ */
+
+html[data-theme="metallic"] body {
+  background-image:
+    linear-gradient(180deg,
+      var(--color-bg-primary) 0%,
+      color-mix(in oklch, var(--color-bg-primary) 85%, oklch(0.26 0.005 240)) 50%,
+      var(--color-bg-primary) 100%),
+    repeating-linear-gradient(90deg,
+      transparent 0, transparent 2px,
+      oklch(0.95 0.002 240 / 0.012) 2px, oklch(0.95 0.002 240 / 0.012) 3px);
+  background-attachment: fixed;
+}
+
+html[data-theme="metallic"] .card,
+html[data-theme="metallic"] .right-panel-tabs {
+  background-image: linear-gradient(180deg,
+    color-mix(in oklch, var(--color-bg-surface) 100%, transparent) 0%,
+    color-mix(in oklch, var(--color-bg-elevated) 60%, var(--color-bg-surface)) 100%);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   BRAIN NODE DRILL-DOWN — click a node, opens a detail panel
+   Patterned on .drill-down (project panel) for visual consistency.
+   ═══════════════════════════════════════════════════════════════ */
+
+.brain-drill {
+  position: absolute;
+  inset: 0;
+  background: var(--color-bg-secondary);
+  animation: slideInRight 0.3s ease;
+  overflow-y: auto;
+  z-index: 20;
+  padding: 0;
+  font-family: var(--font-family-body);
+}
+
+.brain-drill__close {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-family: var(--font-family-mono);
+}
+.brain-drill__close:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-elevated);
+}
+
+.brain-drill__header {
+  padding: var(--space-4) var(--space-4) var(--space-3);
+  border-bottom: 1px solid var(--border-color);
+}
+.brain-drill__group {
+  font-family: var(--font-family-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 600;
+  opacity: 0.9;
+}
+.brain-drill__name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  margin-top: 4px;
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+.brain-drill__stats {
+  display: flex;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-color);
+}
+.brain-drill__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.brain-drill__stat-val {
+  font-family: var(--font-family-mono);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  line-height: 1;
+}
+.brain-drill__stat-label {
+  font-family: var(--font-family-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.brain-drill__section {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-color);
+}
+.brain-drill__section:last-child { border-bottom: none; }
+.brain-drill__section-title {
+  font-family: var(--font-family-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+
+.brain-drill__links {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.brain-drill__link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--color-text-primary);
+  font-family: var(--font-family-body);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+  width: 100%;
+}
+.brain-drill__link:hover {
+  background: var(--color-bg-elevated);
+}
+.brain-drill__link-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.brain-drill__empty {
+  padding: var(--space-4);
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-align: center;
+  font-style: italic;
 }

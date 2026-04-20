@@ -61,7 +61,7 @@ const EXT_LANG: Record<string, string> = {
   '.png': 'image', '.jpg': 'image', '.jpeg': 'image', '.gif': 'image', '.webp': 'image',
 };
 
-function detectLanguage(filePath: string): string {
+export function detectLanguage(filePath: string): string {
   const ext = filePath.slice(filePath.lastIndexOf('.')).toLowerCase();
   return EXT_LANG[ext] || 'text';
 }
@@ -243,6 +243,8 @@ function emptySessionChat(initMessages?: ChatMessage[]): SessionChatState {
     thinking: false,
     status: 'idle',
     thinkingStart: null,
+    lastActivityAt: null,
+    inflightTokens: null,
     siblingUpdates: [],
   };
 }
@@ -285,8 +287,10 @@ function cleanSessionForPersist(s: SessionChatState): SessionChatState {
   return {
     messages: s.messages,
     thinking: false,
-    status: s.status === 'thinking' || s.status === 'streaming' ? 'done' : s.status,
+    status: s.status === 'thinking' || s.status === 'streaming' || s.status === 'stalled' || s.status === 'disconnected' ? 'done' : s.status,
     thinkingStart: null,
+    lastActivityAt: null,
+    inflightTokens: null,
     siblingUpdates: s.siblingUpdates.slice(0, 5),
   };
 }
@@ -309,6 +313,8 @@ function loadPersistedState(): Partial<DashboardState> | null {
                 thinking: false,
                 status: 'done',
                 thinkingStart: null,
+                lastActivityAt: null,
+                inflightTokens: null,
                 siblingUpdates: [],
               },
             },
@@ -372,6 +378,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       calendarSlots: makeCalendar(),
       fileActivities: makeFileActivities(),
       documents: (p?.documents as any[]) || [],
+      uploadedDocuments: [],
       selectedProject: null,
       selectedBrainNode: null,
       centerView: 'constellation',
@@ -752,8 +759,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       case 'session_start': {
         const sid = (msg as any).sessionId || DEFAULT_SESSION;
         setState(s => {
+          const now = Date.now();
           const chatSessions = updateSession(s.chatSessions, sid, ss => ({
-            ...ss, thinking: true, status: 'thinking', thinkingStart: Date.now(),
+            ...ss, thinking: true, status: 'thinking', thinkingStart: now, lastActivityAt: now,
           }));
           return { ...s, chatSessions, chatAuth: (msg as any).auth || 'unknown', ...deriveLegacy(chatSessions) };
         });
@@ -782,6 +790,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             ...ss,
             thinking: false,
             status: 'streaming',
+            lastActivityAt: Date.now(),
             messages: text
               ? [...ss.messages, { id: uid(), role: 'assistant' as const, content: text, timestamp: Date.now() }]
               : ss.messages,
@@ -815,6 +824,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         setState(s => {
           const chatSessions = updateSession(s.chatSessions, sid, ss => ({
             ...ss, thinking: false, status: 'done', thinkingStart: null,
+            lastActivityAt: Date.now(), inflightTokens: null,
           }));
           // Broadcast sibling summary — tell other sessions what this one just did
           const lastMsgs = getOrCreate(chatSessions, sid).messages;
@@ -874,6 +884,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         setState(s => {
           const chatSessions = updateSession(s.chatSessions, sid, ss => ({
             ...ss, thinking: false, status: 'idle', thinkingStart: null,
+            lastActivityAt: Date.now(), inflightTokens: null,
           }));
           return {
             ...s, chatSessions,
@@ -921,7 +932,14 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const dismissNotification = useCallback((id: string) => setState(s => ({ ...s, notifications: s.notifications.map(n => n.id === id ? { ...n, read: true } : n) })), []);
   const addTerminalLine = useCallback((line: string) => setState(s => ({ ...s, terminalLines: [...s.terminalLines, line].slice(-100) })), []);
   const setActiveDocument = useCallback((id: string | null) => setState(s => ({ ...s, activeDocumentId: id })), []);
-  const setRightPanelTab = useCallback((tab: 'memory' | 'documents' | 'editor') => setState(s => ({ ...s, rightPanelTab: tab })), []);
+  const setRightPanelTab = useCallback((tab: 'memory' | 'documents' | 'uploaded' | 'editor') => setState(s => ({ ...s, rightPanelTab: tab })), []);
+  const addUploadedDocument = useCallback((doc: Document) => setState(s => {
+    const existing = s.uploadedDocuments.findIndex(d => d.id === doc.id);
+    const next = existing >= 0
+      ? s.uploadedDocuments.map((d, i) => i === existing ? doc : d)
+      : [doc, ...s.uploadedDocuments].slice(0, 50);
+    return { ...s, uploadedDocuments: next, activeDocumentId: doc.id, rightPanelTab: 'uploaded' };
+  }), []);
 
   // Listen for keyboard shortcut custom events
   useEffect(() => {
@@ -931,15 +949,26 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       const agentId = (e as CustomEvent).detail?.agentId;
       if (!agentId) return;
       const send = wsSendRef.current;
-      if (send) send({ type: 'set_agent', sessionId: DEFAULT_SESSION, agentId });
+      if (send) {
+        const modelId = localStorage.getItem(`venture-os-model-${agentId}`) || undefined;
+        send({ type: 'set_agent', sessionId: DEFAULT_SESSION, agentId, modelId });
+      }
+    };
+    const onModelChange = (e: Event) => {
+      const modelId = (e as CustomEvent).detail?.modelId;
+      if (!modelId) return;
+      const send = wsSendRef.current;
+      if (send) send({ type: 'set_model', sessionId: DEFAULT_SESSION, modelId });
     };
     window.addEventListener('venture-os:toggle-palette', onPalette);
     window.addEventListener('venture-os:toggle-scoreboard', onScoreboard);
     window.addEventListener('venture-os:agent-change', onAgentChange);
+    window.addEventListener('venture-os:model-change', onModelChange);
     return () => {
       window.removeEventListener('venture-os:toggle-palette', onPalette);
       window.removeEventListener('venture-os:toggle-scoreboard', onScoreboard);
       window.removeEventListener('venture-os:agent-change', onAgentChange);
+      window.removeEventListener('venture-os:model-change', onModelChange);
     };
   }, [toggleCommandPalette, toggleScoreboard]);
 
@@ -1052,6 +1081,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     const isActive = isMainSession ? hasActiveSession.current : activeSessionIds.current.has(sid);
 
     const agentId = localStorage.getItem('venture-os-agent') || 'claude';
+    const modelId = localStorage.getItem(`venture-os-model-${agentId}`) || undefined;
 
     if (!isActive) {
       // Include sibling context for forked sessions
@@ -1063,13 +1093,80 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           .join('\n');
         enrichedPrompt = `[Context from sibling sessions]\n${siblingContext}\n[End sibling context]\n\n${trimmed}`;
       }
-      send({ type: 'start', prompt: enrichedPrompt, cwd: '/workspaces/janus-ia', sessionId: sid, agentId });
+      send({ type: 'start', prompt: enrichedPrompt, cwd: '/workspaces/janus-ia', sessionId: sid, agentId, modelId });
       if (isMainSession) hasActiveSession.current = true;
       else activeSessionIds.current.add(sid);
     } else {
-      send({ type: 'follow_up', prompt: trimmed, sessionId: sid, agentId });
+      send({ type: 'follow_up', prompt: trimmed, sessionId: sid, agentId, modelId });
     }
   }, [state.chatSessions]);
+
+  // Called by App.tsx when the WebSocket transitions to 'disconnected'.
+  // Demotes any active thinking/streaming session to 'disconnected' so the UI
+  // stops lying about "responding" when the bridge has actually died.
+  const onConnectionLost = useCallback(() => {
+    setState(s => {
+      const next: Record<string, SessionChatState> = {};
+      let changed = false;
+      for (const [sid, ss] of Object.entries(s.chatSessions)) {
+        if (ss.status === 'thinking' || ss.status === 'streaming') {
+          next[sid] = { ...ss, thinking: false, status: 'disconnected', lastActivityAt: Date.now() };
+          changed = true;
+        } else {
+          next[sid] = ss;
+        }
+      }
+      if (!changed) return s;
+      return { ...s, chatSessions: next, ...deriveLegacy(next) };
+    });
+    hasActiveSession.current = false;
+    activeSessionIds.current.clear();
+  }, []);
+
+  // Called by App.tsx when the WebSocket reconnects. Clears 'disconnected' state
+  // so the next user message can flow normally.
+  const onConnectionRestored = useCallback(() => {
+    setState(s => {
+      const next: Record<string, SessionChatState> = {};
+      let changed = false;
+      for (const [sid, ss] of Object.entries(s.chatSessions)) {
+        if (ss.status === 'disconnected' || ss.status === 'stalled') {
+          next[sid] = { ...ss, status: 'idle', lastActivityAt: Date.now() };
+          changed = true;
+        } else {
+          next[sid] = ss;
+        }
+      }
+      if (!changed) return s;
+      return { ...s, chatSessions: next, ...deriveLegacy(next) };
+    });
+  }, []);
+
+  // Stall watchdog — if a session has been in thinking/streaming with no bridge
+  // traffic for STALL_THRESHOLD_MS, mark it as 'stalled' so the user can see
+  // the turn is frozen and decide whether to interrupt.
+  const STALL_THRESHOLD_MS = 90_000;
+  useEffect(() => {
+    const tick = setInterval(() => {
+      setState(s => {
+        const now = Date.now();
+        let changed = false;
+        const next: Record<string, SessionChatState> = {};
+        for (const [sid, ss] of Object.entries(s.chatSessions)) {
+          if ((ss.status === 'thinking' || ss.status === 'streaming')
+              && ss.lastActivityAt && (now - ss.lastActivityAt) > STALL_THRESHOLD_MS) {
+            next[sid] = { ...ss, status: 'stalled' };
+            changed = true;
+          } else {
+            next[sid] = ss;
+          }
+        }
+        if (!changed) return s;
+        return { ...s, chatSessions: next, ...deriveLegacy(next) };
+      });
+    }, 5_000);
+    return () => clearInterval(tick);
+  }, []);
 
   const stopResponse = useCallback((sessionId: string = DEFAULT_SESSION) => {
     const send = wsSendRef.current;
@@ -1150,10 +1247,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     return newSessionId;
   }, [state.chatSessions]);
 
-  const actions: DashboardActions = { selectProject, selectBrainNode, setCenterView, toggleCommandPalette, toggleScoreboard, sendChatMessage, stopResponse, editMessage, getSessionChat, dismissNotification, addTerminalLine, setActiveDocument, setRightPanelTab, forkChat };
+  const actions: DashboardActions = { selectProject, selectBrainNode, setCenterView, toggleCommandPalette, toggleScoreboard, sendChatMessage, stopResponse, editMessage, getSessionChat, dismissNotification, addTerminalLine, setActiveDocument, setRightPanelTab, addUploadedDocument, forkChat };
 
   return (
-    <DashboardContext.Provider value={{ ...state, ...actions, _handleBridgeMessage: handleBridgeMessage, _registerWsSend: registerWsSend } as any}>
+    <DashboardContext.Provider value={{ ...state, ...actions, _handleBridgeMessage: handleBridgeMessage, _registerWsSend: registerWsSend, _onConnectionLost: onConnectionLost, _onConnectionRestored: onConnectionRestored } as any}>
       {children}
     </DashboardContext.Provider>
   );
@@ -1168,4 +1265,12 @@ export function useBridgeHandler(): (msg: ServerMessage) => void {
 export function useRegisterWsSend(): (send: (msg: any) => void) => void {
   const ctx = useContext(DashboardContext) as any;
   return ctx?._registerWsSend || (() => {});
+}
+
+export function useConnectionStateSync() {
+  const ctx = useContext(DashboardContext) as any;
+  return {
+    onConnectionLost: ctx?._onConnectionLost || (() => {}),
+    onConnectionRestored: ctx?._onConnectionRestored || (() => {}),
+  };
 }

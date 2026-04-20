@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useDashboard } from '../store';
 
 type FieldType = 'password' | 'text';
@@ -9,6 +9,10 @@ interface CredentialField {
   envVar: string;
   type: FieldType;
   placeholder?: string;
+  /** Direct link to the page where THIS specific field is obtained, if different from the entry's docsUrl. */
+  docsUrl?: string;
+  /** Tiny per-field hint (one line) — shown next to the field link. */
+  hint?: string;
 }
 
 interface CredentialEntry {
@@ -84,25 +88,46 @@ const DEFAULT_CREDENTIALS: CredentialEntry[] = [
     docsUrl: 'https://docs.snowflake.com/en/user-guide/admin-account-identifier',
     howTo: 'Account = the identifier in your Snowflake URL (orgname-account). User/password from your Snowflake admin. Warehouse / database / role from your account admin or "SHOW WAREHOUSES" in the worksheet.',
     fields: [
-      { id: 'snowflake-account',     label: 'Account',             envVar: 'SNOWFLAKE_ACCOUNT',           type: 'text' },
-      { id: 'snowflake-user',        label: 'User',                envVar: 'SNOWFLAKE_USER',              type: 'text' },
-      { id: 'snowflake-password',    label: 'Password',            envVar: 'SNOWFLAKE_PASSWORD',          type: 'password' },
-      { id: 'snowflake-warehouse',   label: 'Warehouse',           envVar: 'SNOWFLAKE_WAREHOUSE',         type: 'text' },
-      { id: 'snowflake-database',    label: 'Database',            envVar: 'SNOWFLAKE_DATABASE',          type: 'text' },
-      { id: 'snowflake-role',        label: 'Role',                envVar: 'SNOWFLAKE_ROLE',              type: 'text' },
+      { id: 'snowflake-account',     label: 'Account',             envVar: 'SNOWFLAKE_ACCOUNT',           type: 'text',
+        hint: 'the `orgname-account` segment of your Snowflake URL (e.g. FW64584-REECE from FW64584-REECE.snowflakecomputing.com)' },
+      { id: 'snowflake-user',        label: 'User',                envVar: 'SNOWFLAKE_USER',              type: 'text',
+        hint: 'your Snowflake login username — ask your admin if unsure' },
+      { id: 'snowflake-password',    label: 'Password',            envVar: 'SNOWFLAKE_PASSWORD',          type: 'password',
+        hint: 'issued by your Snowflake admin; reset in Snowsight → your name → My profile → Change password' },
+      { id: 'snowflake-warehouse',   label: 'Warehouse',           envVar: 'SNOWFLAKE_WAREHOUSE',         type: 'text',
+        hint: 'run `SHOW WAREHOUSES` in a worksheet to list available ones' },
+      { id: 'snowflake-database',    label: 'Database',            envVar: 'SNOWFLAKE_DATABASE',          type: 'text',
+        hint: 'run `SHOW DATABASES` to list; common default is ODS' },
+      { id: 'snowflake-role',        label: 'Role',                envVar: 'SNOWFLAKE_ROLE',              type: 'text',
+        hint: 'run `SHOW ROLES` or ask your admin which role your user is granted' },
     ],
   },
   {
     id: 'google-calendar',
     provider: 'google',
-    name: 'Google Calendar (OAuth)',
-    scope: 'Read + write events on the connected Google account (per-user OAuth, not service account)',
+    name: 'Google (Calendar / Drive / Gmail OAuth)',
+    scope: 'Read + write on the connected Google account — scopes the refresh token was minted with (per-user OAuth, not service account)',
     docsUrl: 'https://console.cloud.google.com/apis/credentials',
-    howTo: 'Cloud Console → APIs & Services → Credentials → Create OAuth client ID (Web application). Enable Calendar API first. Generate refresh token via OAuth Playground (developers.google.com/oauthplayground) using the Calendar scope.',
+    howTo: 'One-time: Cloud Console → APIs & Services → Credentials → OAuth client (Web). Add `https://developers.google.com/oauthplayground` to Authorized redirect URIs. Then mint the refresh token at the Playground with the scopes you need.',
     fields: [
-      { id: 'google-client-id',      label: 'Client ID',            envVar: 'GOOGLE_CLIENT_ID',            type: 'text',     placeholder: 'xxx.apps.googleusercontent.com' },
-      { id: 'google-client-secret',  label: 'Client secret',        envVar: 'GOOGLE_CLIENT_SECRET',        type: 'password', placeholder: 'GOCSPX-...' },
-      { id: 'google-refresh-token',  label: 'Refresh token',        envVar: 'GOOGLE_REFRESH_TOKEN',        type: 'password', placeholder: '1//0g...' },
+      {
+        id: 'google-client-id', label: 'Client ID', envVar: 'GOOGLE_CLIENT_ID', type: 'text',
+        placeholder: 'xxx.apps.googleusercontent.com',
+        docsUrl: 'https://console.cloud.google.com/apis/credentials',
+        hint: 'Cloud Console → APIs & Services → Credentials → your OAuth client',
+      },
+      {
+        id: 'google-client-secret', label: 'Client secret', envVar: 'GOOGLE_CLIENT_SECRET', type: 'password',
+        placeholder: 'GOCSPX-...',
+        docsUrl: 'https://console.cloud.google.com/apis/credentials',
+        hint: 'same OAuth client as the ID above',
+      },
+      {
+        id: 'google-refresh-token', label: 'Refresh token', envVar: 'GOOGLE_REFRESH_TOKEN', type: 'password',
+        placeholder: '1//0g...',
+        docsUrl: 'https://developers.google.com/oauthplayground/',
+        hint: 'OAuth Playground → gear → use own creds → scope → Authorize → Exchange',
+      },
     ],
   },
   {
@@ -155,10 +180,18 @@ const DEFAULT_CREDENTIALS: CredentialEntry[] = [
     name: 'WhatsApp — Receive',
     scope: 'Receive inbound messages via webhook (webhook verification only)',
     docsUrl: 'https://developers.facebook.com/docs/whatsapp/cloud-api/guides/set-up-webhooks',
-    howTo: 'Meta App → WhatsApp → Configuration → Webhooks. The verify token is a string YOU choose (Meta echoes it back during handshake). Phone number ID is on WhatsApp → API Setup.',
+    howTo: 'Meta App → WhatsApp → Configuration → Webhooks. The verify token is a string YOU choose (Meta echoes it back during handshake).',
     fields: [
-      { id: 'wa-verify-token',       label: 'Webhook verify token', envVar: 'WHATSAPP_WEBHOOK_VERIFY_TOKEN', type: 'password', placeholder: 'your chosen token' },
-      { id: 'wa-phone-id',           label: 'Phone number ID',      envVar: 'WHATSAPP_PHONE_NUMBER_ID',      type: 'text' },
+      {
+        id: 'wa-verify-token', label: 'Webhook verify token', envVar: 'WHATSAPP_WEBHOOK_VERIFY_TOKEN', type: 'password',
+        placeholder: 'your chosen token',
+        hint: 'you invent this; Meta echoes it back during handshake — no URL to fetch it from',
+      },
+      {
+        id: 'wa-phone-id', label: 'Phone number ID', envVar: 'WHATSAPP_PHONE_NUMBER_ID', type: 'text',
+        docsUrl: 'https://developers.facebook.com/apps',
+        hint: 'your app → WhatsApp → API Setup',
+      },
     ],
   },
   {
@@ -167,11 +200,24 @@ const DEFAULT_CREDENTIALS: CredentialEntry[] = [
     name: 'WhatsApp — Send',
     scope: 'Send outbound messages via Cloud API (requires Meta app + system user token)',
     docsUrl: 'https://business.facebook.com/settings/system-users',
-    howTo: 'Meta Business Suite → Business Settings → System Users → Add → Generate token (assign WhatsApp asset, scopes: whatsapp_business_messaging + whatsapp_business_management). App ID at developers.facebook.com/apps. Business account ID at Business Settings → Business Info.',
+    howTo: 'Each field lives in a different Meta surface — use the per-field links below.',
     fields: [
-      { id: 'wa-access-token',       label: 'System user access token', envVar: 'WHATSAPP_ACCESS_TOKEN',       type: 'password', placeholder: 'EAAG...' },
-      { id: 'wa-app-id',             label: 'Meta App ID',              envVar: 'WHATSAPP_APP_ID',             type: 'text' },
-      { id: 'wa-business-id',        label: 'Business account ID',      envVar: 'WHATSAPP_BUSINESS_ACCOUNT_ID', type: 'text' },
+      {
+        id: 'wa-access-token', label: 'System user access token', envVar: 'WHATSAPP_ACCESS_TOKEN', type: 'password',
+        placeholder: 'EAAG...',
+        docsUrl: 'https://business.facebook.com/settings/system-users',
+        hint: 'Business Settings → System Users → Add → Generate token (scopes: whatsapp_business_messaging + _management)',
+      },
+      {
+        id: 'wa-app-id', label: 'Meta App ID', envVar: 'WHATSAPP_APP_ID', type: 'text',
+        docsUrl: 'https://developers.facebook.com/apps',
+        hint: 'pick your app — the App ID is shown in the header',
+      },
+      {
+        id: 'wa-business-id', label: 'Business account ID', envVar: 'WHATSAPP_BUSINESS_ACCOUNT_ID', type: 'text',
+        docsUrl: 'https://business.facebook.com/settings/info',
+        hint: 'Business Settings → Business Info → Business account ID',
+      },
     ],
   },
 ];
@@ -209,8 +255,29 @@ export function Credentials({ onClose }: { onClose: () => void }) {
 
   const allEntries = useMemo(() => [...DEFAULT_CREDENTIALS, ...customEntries], [customEntries]);
 
+  // Source-of-truth for "is this field set?" — the bridge reports which env
+  // vars are present in its process.env (dotfiles + Codespace secrets, merged).
+  // The static `tools` array has stale `configured` flags and doesn't include
+  // every field we care about, so we query the bridge directly.
+  const [envPresence, setEnvPresence] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    const envVars = Array.from(new Set(allEntries.flatMap(e => e.fields.map(f => f.envVar))));
+    if (envVars.length === 0) return;
+    let cancelled = false;
+    fetch('/api/credentials/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ envVars }),
+    })
+      .then(r => r.json())
+      .then(j => { if (!cancelled && j?.ok) setEnvPresence(j.envVars || {}); })
+      .catch(() => { /* bridge unreachable — fall back to tools registry */ });
+    return () => { cancelled = true; };
+  }, [allEntries]);
+
   function isFieldSet(envVar: string) {
     if (sessionSet[envVar]) return true;
+    if (envPresence[envVar]) return true;
     const tool = tools.find(t => t.envVar === envVar);
     return tool ? tool.configured === 'ready' : false;
   }
@@ -438,7 +505,21 @@ export function Credentials({ onClose }: { onClose: () => void }) {
                             <span className={`credentials__dot credentials__dot--${setAlready ? 'set' : 'unset'}`} />
                             <span className="credentials__field-label">{field.label}</span>
                             <span className="credentials__env-var">{field.envVar}</span>
+                            {field.docsUrl && (
+                              <a
+                                className="credentials__howto-link"
+                                href={field.docsUrl}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                                title={field.hint}
+                              >
+                                where ↗
+                              </a>
+                            )}
                           </div>
+                          {field.hint && (
+                            <div className="credentials__field-hint">{field.hint}</div>
+                          )}
                           <input
                             type={field.type === 'password' ? 'password' : 'text'}
                             className="credentials__input"

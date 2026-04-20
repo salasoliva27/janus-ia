@@ -53,6 +53,33 @@ function formatCell(v: unknown): string {
   return String(v);
 }
 
+// RFC 4180-ish CSV: wrap cells containing quote, comma, or newline in quotes
+// and double any inner quotes. Null/undefined become empty strings.
+function toCsvCell(v: unknown): string {
+  if (v === null || v === undefined) return '';
+  const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+  if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function rowsToCsv(columns: string[], rows: Record<string, unknown>[]): string {
+  const head = columns.map(toCsvCell).join(',');
+  const body = rows.map(r => columns.map(c => toCsvCell(r[c])).join(',')).join('\n');
+  return head + '\n' + body + (body ? '\n' : '');
+}
+
+function downloadBlob(content: string, filename: string, mime: string) {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export function SQLConsole({ tool }: SQLConsoleProps) {
   const { sendChatMessage } = useDashboard();
   const [query, setQuery] = useState<string>('');
@@ -141,6 +168,18 @@ export function SQLConsole({ tool }: SQLConsoleProps) {
 
   const rows = result?.rows ?? [];
   const columns = result?.columns ?? [];
+  const canDownload = !!result?.ok && rows.length > 0 && columns.length > 0;
+
+  function downloadCsv() {
+    if (!canDownload) return;
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    downloadBlob(rowsToCsv(columns, rows), `${tool}-${stamp}.csv`, 'text/csv;charset=utf-8');
+  }
+  function downloadJson() {
+    if (!canDownload) return;
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    downloadBlob(JSON.stringify(rows, null, 2), `${tool}-${stamp}.json`, 'application/json');
+  }
 
   return (
     <div className="sql-console">
@@ -169,6 +208,24 @@ export function SQLConsole({ tool }: SQLConsoleProps) {
         )}
         {result?.ok && result.rowCount != null && (
           <span className="sql-console__meta">{result.rowCount} row{result.rowCount === 1 ? '' : 's'}</span>
+        )}
+        {canDownload && (
+          <>
+            <button
+              className="sql-console__btn sql-console__btn--ghost"
+              onClick={downloadCsv}
+              title="Download result as CSV"
+            >
+              ↓ CSV
+            </button>
+            <button
+              className="sql-console__btn sql-console__btn--ghost"
+              onClick={downloadJson}
+              title="Download result as JSON"
+            >
+              ↓ JSON
+            </button>
+          </>
         )}
       </div>
 

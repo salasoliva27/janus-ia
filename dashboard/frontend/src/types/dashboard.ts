@@ -152,6 +152,10 @@ export interface Document {
   language: string;
   content: string;
   timestamp: number;
+  /** Bytes — only meaningful for uploaded binary docs */
+  size?: number;
+  /** Drive view URL once the async Drive mirror completes */
+  driveUrl?: string;
 }
 
 export interface DashboardState {
@@ -170,6 +174,7 @@ export interface DashboardState {
   calendarSlots: CalendarSlot[];
   fileActivities: FileActivity[];
   documents: Document[];
+  uploadedDocuments: Document[];
   // UI state
   selectedProject: string | null;
   selectedBrainNode: string | null;
@@ -183,10 +188,10 @@ export interface DashboardState {
   // Legacy compat — derived from chatSessions['session-0']
   chatMessages: ChatMessage[];
   chatThinking: boolean;
-  chatStatus: 'idle' | 'thinking' | 'streaming' | 'done';
+  chatStatus: 'idle' | 'thinking' | 'streaming' | 'done' | 'stalled' | 'disconnected';
   chatThinkingStart: number | null;
   activeDocumentId: string | null;
-  rightPanelTab: 'memory' | 'documents' | 'editor';
+  rightPanelTab: 'memory' | 'documents' | 'uploaded' | 'editor';
   agentCounts: Record<string, number>;
   projectCounts: Record<string, number>;
   /** Auto-memory index loaded from /api/memory/index */
@@ -224,8 +229,13 @@ export interface MemoryIndex {
 export interface SessionChatState {
   messages: ChatMessage[];
   thinking: boolean;
-  status: 'idle' | 'thinking' | 'streaming' | 'done';
+  status: 'idle' | 'thinking' | 'streaming' | 'done' | 'stalled' | 'disconnected';
   thinkingStart: number | null;
+  /** Timestamp of the last bridge message received for this session.
+   *  Used by the stall watchdog to detect frozen turns. */
+  lastActivityAt: number | null;
+  /** Approximate input-token count of the in-flight turn (based on prompt length). */
+  inflightTokens: number | null;
   /** Sibling summaries — what other forks are doing */
   siblingUpdates: { sessionId: string; summary: string; timestamp: number }[];
 }
@@ -243,7 +253,8 @@ export interface DashboardActions {
   dismissNotification: (id: string) => void;
   addTerminalLine: (line: string) => void;
   setActiveDocument: (id: string | null) => void;
-  setRightPanelTab: (tab: 'memory' | 'documents' | 'editor') => void;
+  setRightPanelTab: (tab: 'memory' | 'documents' | 'uploaded' | 'editor') => void;
+  addUploadedDocument: (doc: Document) => void;
   forkChat: (parentSessionId: string, label: string) => string;
 }
 
