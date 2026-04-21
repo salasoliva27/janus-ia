@@ -120,6 +120,13 @@
         "<package>"
       ],
       "env": {}
+    },
+    "b2-ui-roundtrip": {
+      "command": "echo",
+      "args": [
+        "hello-from-ui"
+      ],
+      "env": {}
     }
   }
 }
