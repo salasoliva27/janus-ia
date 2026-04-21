@@ -89,6 +89,30 @@ export function startServer(port: number): Promise<http.Server> {
     }
   });
 
+  // Usage brain — graph built from brain_events (MCP tool calls)
+  app.get("/api/brain/events", async (_req, res) => {
+    try {
+      const url = process.env.SUPABASE_URL;
+      const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!url || !key) {
+        res.status(500).json({ error: "SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing", nodes: [], edges: [] });
+        return;
+      }
+      const resp = await fetch(`${url.replace(/\/+$/, "")}/rest/v1/brain_events?select=tool_name,workspace,project,status,created_at&order=created_at.desc&limit=2000`, {
+        headers: { apikey: key, Authorization: `Bearer ${key}` },
+      });
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => "");
+        res.status(resp.status).json({ error: `Supabase REST error: ${body.slice(0, 200)}`, nodes: [], edges: [] });
+        return;
+      }
+      const rows = (await resp.json()) as Array<{ tool_name: string; workspace: string | null; project: string | null; status: string; created_at: string }>;
+      res.json(buildUsageGraph(rows));
+    } catch (err) {
+      res.status(500).json({ error: String(err), nodes: [], edges: [] });
+    }
+  });
+
   // Detect active ports
   app.get("/api/ports", async (_req, res) => {
     try {
@@ -962,6 +986,74 @@ interface GraphNode {
   label: string;
   group: string;
   links: string[];
+}
+
+// Build a graph from brain_events rows. Nodes: one per tool_name (agents group),
+// one per project (wiki group), one per workspace (concepts group). Edges:
+// tool↔project and tool↔workspace when they co-occur in the log.
+function buildUsageGraph(
+  rows: Array<{ tool_name: string; workspace: string | null; project: string | null; status: string; created_at: string }>,
+): { nodes: GraphNode[]; edges: { source: string; target: string }[] } {
+  const toolCounts = new Map<string, number>();
+  const projCounts = new Map<string, number>();
+  const wsCounts = new Map<string, number>();
+  const pairs = new Set<string>(); // "src|tgt"
+
+  for (const r of rows) {
+    const tool = r.tool_name;
+    const toolId = `u-tool-${tool}`;
+    toolCounts.set(toolId, (toolCounts.get(toolId) ?? 0) + 1);
+
+    if (r.project) {
+      const projId = `u-proj-${r.project}`;
+      projCounts.set(projId, (projCounts.get(projId) ?? 0) + 1);
+      pairs.add(`${toolId}|${projId}`);
+    }
+    if (r.workspace) {
+      const wsId = `u-ws-${r.workspace}`;
+      wsCounts.set(wsId, (wsCounts.get(wsId) ?? 0) + 1);
+      pairs.add(`${toolId}|${wsId}`);
+    }
+  }
+
+  const nodes: GraphNode[] = [];
+  const outgoing = new Map<string, string[]>(); // node → links
+
+  for (const [id] of toolCounts) {
+    outgoing.set(id, []);
+  }
+  for (const [id] of projCounts) {
+    outgoing.set(id, []);
+  }
+  for (const [id] of wsCounts) {
+    outgoing.set(id, []);
+  }
+
+  const edges: { source: string; target: string }[] = [];
+  for (const p of pairs) {
+    const [src, tgt] = p.split("|");
+    edges.push({ source: src, target: tgt });
+    outgoing.get(src)?.push(tgt);
+    outgoing.get(tgt)?.push(src);
+  }
+
+  // Renderer sizes nodes by links.length. Pad the links array with repeats of
+  // the first real link so heavily-used nodes render bigger — does not affect
+  // the separate edges array the renderer draws.
+  const pad = (base: string[], extra: number) =>
+    extra <= 0 || base.length === 0 ? base : [...base, ...Array(Math.min(extra, 20)).fill(base[0])];
+
+  const pushBy = (counts: Map<string, number>, prefix: string, group: string) => {
+    for (const [id, count] of counts) {
+      const base = outgoing.get(id) ?? [];
+      nodes.push({ id, label: id.replace(prefix, ""), group, links: pad(base, count - 1) });
+    }
+  };
+  pushBy(toolCounts, "u-tool-", "agents");
+  pushBy(projCounts, "u-proj-", "wiki");
+  pushBy(wsCounts, "u-ws-", "concepts");
+
+  return { nodes, edges };
 }
 
 function buildGraphFromFs(): { nodes: GraphNode[]; edges: { source: string; target: string }[] } {

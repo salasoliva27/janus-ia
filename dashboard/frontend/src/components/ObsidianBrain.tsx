@@ -62,7 +62,7 @@ function runForceStep(nodes: BrainNode[], edges: BrainEdge[], w: number, h: numb
 }
 
 export function ObsidianBrain() {
-  const { brainNodes, brainEdges, setCenterView, centerView, selectBrainNode } = useDashboard();
+  const { brainNodes, brainEdges, setCenterView, centerView, selectBrainNode, brainSource, setBrainSource } = useDashboard();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const nodesRef = useRef<BrainNode[]>([]);
   const edgesRef = useRef<BrainEdge[]>([]);
@@ -398,6 +398,20 @@ export function ObsidianBrain() {
         onMouseUp={handleMouseUp}
         onWheel={handleWheel}
       />
+      <div className="brain__source-toggle">
+        <span className="brain__source-label">Brain</span>
+        {(['vault', 'usage'] as const).map(s => (
+          <button
+            key={s}
+            className={`constellation__view-btn ${brainSource === s ? 'constellation__view-btn--active' : ''}`}
+            onClick={() => setBrainSource(s)}
+            title={s === 'vault' ? 'Vault — concepts, learnings, agents, memories' : 'Usage — live agent activity from brain_events'}
+          >
+            {s === 'vault' ? 'Vault' : 'Usage'}
+          </button>
+        ))}
+        <span className="brain__source-count">{brainNodes.length}n · {brainEdges.length}e</span>
+      </div>
       <div className="constellation__view-toggle">
         {(['constellation', 'brain', 'procedures', 'files'] as const).map(v => (
           <button

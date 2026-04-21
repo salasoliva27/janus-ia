@@ -145,6 +145,8 @@ export interface FileActivity {
 
 export type CenterView = 'constellation' | 'brain' | 'procedures' | 'files';
 
+export type BrainSource = 'vault' | 'usage';
+
 export interface Document {
   id: string;
   path: string;
@@ -167,6 +169,7 @@ export interface DashboardState {
   gitCommits: GitCommit[];
   brainNodes: BrainNode[];
   brainEdges: BrainEdge[];
+  brainSource: BrainSource;
   notifications: Notification[];
   sessionEvents: SessionEvent[];
   learnings: Learning[];
@@ -244,6 +247,7 @@ export interface DashboardActions {
   selectProject: (id: string | null) => void;
   selectBrainNode: (id: string | null) => void;
   setCenterView: (view: CenterView) => void;
+  setBrainSource: (source: BrainSource) => void;
   toggleCommandPalette: () => void;
   toggleScoreboard: () => void;
   sendChatMessage: (msg: string, sessionId?: string) => void;

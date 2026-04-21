@@ -66,6 +66,33 @@ $$;
 -- 5. Enable Row Level Security (service_role key bypasses this anyway, but good practice)
 alter table memories enable row level security;
 
+-- 6. brain_events — usage log, one row per MCP tool call.
+-- The dashboard reads this table to build the "Usage Brain" graph so you can
+-- watch agent activity accumulate over time. Writes come from the wrapper in
+-- mcp-servers/memory/index.js; reads from /api/brain/events in the bridge.
+create table if not exists brain_events (
+  id             uuid primary key default gen_random_uuid(),
+  workspace      text,
+  project        text,
+  tool_name      text not null,
+  session_id     text,
+  args           jsonb not null default '{}',
+  result_summary text,
+  status         text not null default 'ok' check (status in ('ok','error')),
+  error_message  text,
+  metadata       jsonb not null default '{}',
+  created_at     timestamptz not null default now()
+);
+
+create index if not exists brain_events_created_idx   on brain_events(created_at desc);
+create index if not exists brain_events_tool_idx      on brain_events(tool_name);
+create index if not exists brain_events_workspace_idx on brain_events(workspace);
+create index if not exists brain_events_project_idx   on brain_events(project);
+create index if not exists brain_events_session_idx   on brain_events(session_id);
+
+alter table brain_events enable row level security;
+
 -- Done. The memory server is ready.
 -- Text search works immediately.
 -- Semantic search activates once VOYAGE_API_KEY is added to dotfiles.
+-- Usage Brain activates as soon as the memory MCP server makes tool calls.

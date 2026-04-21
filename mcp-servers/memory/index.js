@@ -20,6 +20,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { createClient } from '@supabase/supabase-js'
 import neo4j from 'neo4j-driver'
+import { randomUUID } from 'node:crypto'
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -28,6 +29,39 @@ const supabase = createClient(
 
 const VOYAGE_KEY = process.env.VOYAGE_API_KEY
 const VECTOR_DIMS = 512
+
+// Per-server-run id so every tool call made by this memory-MCP process
+// shares a session_id in brain_events. Lets the Usage Brain group calls
+// into temporal flows without needing the MCP protocol to carry a session.
+const BRAIN_SESSION_ID = randomUUID()
+
+async function logBrainEvent(toolName, args, status, resultSummary, errorMessage) {
+  try {
+    const redactedArgs = {}
+    for (const [k, v] of Object.entries(args || {})) {
+      if (typeof v === 'string') {
+        redactedArgs[k] = v.length > 200 ? v.slice(0, 200) + '…' : v
+      } else if (Array.isArray(v) || (v && typeof v === 'object')) {
+        const s = JSON.stringify(v)
+        redactedArgs[k] = s.length > 400 ? s.slice(0, 400) + '…' : v
+      } else {
+        redactedArgs[k] = v
+      }
+    }
+    await supabase.from('brain_events').insert({
+      workspace: args?.workspace ?? null,
+      project: args?.project ?? args?.workspace ?? null,
+      tool_name: toolName,
+      session_id: BRAIN_SESSION_ID,
+      args: redactedArgs,
+      result_summary: resultSummary ? String(resultSummary).slice(0, 500) : null,
+      status,
+      error_message: errorMessage ? String(errorMessage).slice(0, 500) : null,
+    })
+  } catch {
+    // Logging must never break tool calls. Swallow.
+  }
+}
 
 // Neo4j is optional — the brain graph is a projection of Supabase + vault.
 // If creds are missing, graph_query simply errors; the rest of the server
@@ -218,9 +252,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   ]
 }))
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params
-
+async function handleTool(name, args) {
   if (name === 'remember') {
     const { content, workspace, type = 'learning', tags = [], metadata = {} } = args
     // Never store NULL project. If caller omits it, default to the workspace name
@@ -426,6 +458,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   throw new Error(`Unknown tool: ${name}`)
+}
+
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name, arguments: args } = request.params
+  try {
+    const result = await handleTool(name, args)
+    const summary = result?.content?.[0]?.text ?? null
+    void logBrainEvent(name, args, 'ok', summary, null)
+    return result
+  } catch (err) {
+    void logBrainEvent(name, args, 'error', null, err?.message ?? String(err))
+    throw err
+  }
 })
 
 function formatResults(rows) {

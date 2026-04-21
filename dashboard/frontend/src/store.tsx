@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
-import type { DashboardState, DashboardActions, Project, ToolStatus, BrainNode, BrainEdge, Notification, Learning, CalendarSlot, FileActivity, CenterView, Document, AgentInfo, MemoryEntry, SessionChatState, ChatMessage, MemoryIndex } from './types/dashboard';
+import type { DashboardState, DashboardActions, Project, ToolStatus, BrainNode, BrainEdge, Notification, Learning, CalendarSlot, FileActivity, CenterView, BrainSource, Document, AgentInfo, MemoryEntry, SessionChatState, ChatMessage, MemoryIndex } from './types/dashboard';
 import type { ServerMessage } from './types/bridge';
 
 // ── Static Data (real project state, not simulated) ────────
@@ -382,6 +382,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       selectedProject: null,
       selectedBrainNode: null,
       centerView: 'constellation',
+      brainSource: 'vault',
       commandPaletteOpen: false,
       scoreboardOpen: false,
       chatSessions: (p?.chatSessions as Record<string, SessionChatState>) || {
@@ -469,36 +470,56 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       .catch(() => {});
   }, []);
 
-  // ── Fetch real graph data from bridge API ────────────
+  // ── Fetch graph data from bridge API (vault brain from fs, usage brain from brain_events) ─────
+  const brainSource = state.brainSource;
   useEffect(() => {
-    fetch('/api/graph')
-      .then(r => r.json())
-      .then((data: { nodes: { id: string; label: string; group: string; links: string[] }[]; edges: { source: string; target: string }[] }) => {
-        if (!data.nodes || data.nodes.length === 0) return; // Keep fallback if API empty
-        const groupAngles: Record<string, number> = { wiki: 0, concepts: Math.PI / 2, learnings: Math.PI, agents: (3 * Math.PI) / 2 };
-        const cx = 400, cy = 300;
-        const nodes: BrainNode[] = data.nodes.map((n) => {
-          const group = (n.group as BrainNode['group']) || 'other';
-          const base = groupAngles[group] || 0;
-          const groupNodes = data.nodes.filter(r => r.group === n.group);
-          const gi = groupNodes.indexOf(n);
-          const spread = 0.8;
-          const angle = base + (gi - groupNodes.length / 2) * spread * 0.3;
-          const radius = 120 + Math.random() * 100;
-          return {
-            id: n.id, label: n.label, group,
-            connections: n.links.length,
-            x: cx + Math.cos(angle) * radius + (Math.random() - 0.5) * 60,
-            y: cy + Math.sin(angle) * radius + (Math.random() - 0.5) * 60,
-            vx: 0, vy: 0,
-            size: Math.max(4, 3 + n.links.length * 1.5),
-          };
-        });
-        const edges: BrainEdge[] = data.edges.map(e => ({ source: e.source, target: e.target, firing: false, fireProgress: 0 }));
-        setState(s => ({ ...s, brainNodes: nodes, brainEdges: edges }));
-      })
-      .catch(() => { /* keep hardcoded fallback */ });
-  }, []);
+    let cancelled = false;
+    const endpoint = brainSource === 'usage' ? '/api/brain/events' : '/api/graph';
+
+    function loadGraph() {
+      fetch(endpoint)
+        .then(r => r.json())
+        .then((data: { nodes: { id: string; label: string; group: string; links: string[] }[]; edges: { source: string; target: string }[] }) => {
+          if (cancelled) return;
+          const groupAngles: Record<string, number> = { wiki: 0, concepts: Math.PI / 2, learnings: Math.PI, agents: (3 * Math.PI) / 2 };
+          const cx = 400, cy = 300;
+          const safeNodes = data.nodes ?? [];
+          if (safeNodes.length === 0) {
+            // Empty is a valid state for the usage brain — render an empty graph so Jano can watch it grow.
+            if (brainSource === 'usage') setState(s => ({ ...s, brainNodes: [], brainEdges: [] }));
+            return;
+          }
+          const nodes: BrainNode[] = safeNodes.map((n) => {
+            const group = (n.group as BrainNode['group']) || 'other';
+            const base = groupAngles[group] || 0;
+            const groupNodes = safeNodes.filter(r => r.group === n.group);
+            const gi = groupNodes.indexOf(n);
+            const spread = 0.8;
+            const angle = base + (gi - groupNodes.length / 2) * spread * 0.3;
+            const radius = 120 + Math.random() * 100;
+            return {
+              id: n.id, label: n.label, group,
+              connections: n.links.length,
+              x: cx + Math.cos(angle) * radius + (Math.random() - 0.5) * 60,
+              y: cy + Math.sin(angle) * radius + (Math.random() - 0.5) * 60,
+              vx: 0, vy: 0,
+              size: Math.max(4, 3 + n.links.length * 1.5),
+            };
+          });
+          const edges: BrainEdge[] = (data.edges ?? []).map(e => ({ source: e.source, target: e.target, firing: false, fireProgress: 0 }));
+          setState(s => ({ ...s, brainNodes: nodes, brainEdges: edges }));
+        })
+        .catch(() => { /* keep existing graph on error */ });
+    }
+
+    loadGraph();
+    // Usage brain auto-refreshes so Jano can watch it grow without manually reloading.
+    const interval = brainSource === 'usage' ? window.setInterval(loadGraph, 15000) : null;
+    return () => {
+      cancelled = true;
+      if (interval) window.clearInterval(interval);
+    };
+  }, [brainSource]);
 
   // ── Process real WebSocket events from bridge ────────────
   // This is called by App.tsx when a WebSocket message arrives
@@ -927,6 +948,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const selectProject = useCallback((id: string | null) => setState(s => ({ ...s, selectedProject: id })), []);
   const selectBrainNode = useCallback((id: string | null) => setState(s => ({ ...s, selectedBrainNode: id })), []);
   const setCenterView = useCallback((view: CenterView) => setState(s => ({ ...s, centerView: view })), []);
+  const setBrainSource = useCallback((source: BrainSource) => setState(s => ({ ...s, brainSource: source })), []);
   const toggleCommandPalette = useCallback(() => setState(s => ({ ...s, commandPaletteOpen: !s.commandPaletteOpen })), []);
   const toggleScoreboard = useCallback(() => setState(s => ({ ...s, scoreboardOpen: !s.scoreboardOpen })), []);
   const dismissNotification = useCallback((id: string) => setState(s => ({ ...s, notifications: s.notifications.map(n => n.id === id ? { ...n, read: true } : n) })), []);
@@ -1247,7 +1269,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     return newSessionId;
   }, [state.chatSessions]);
 
-  const actions: DashboardActions = { selectProject, selectBrainNode, setCenterView, toggleCommandPalette, toggleScoreboard, sendChatMessage, stopResponse, editMessage, getSessionChat, dismissNotification, addTerminalLine, setActiveDocument, setRightPanelTab, addUploadedDocument, forkChat };
+  const actions: DashboardActions = { selectProject, selectBrainNode, setCenterView, setBrainSource, toggleCommandPalette, toggleScoreboard, sendChatMessage, stopResponse, editMessage, getSessionChat, dismissNotification, addTerminalLine, setActiveDocument, setRightPanelTab, addUploadedDocument, forkChat };
 
   return (
     <DashboardContext.Provider value={{ ...state, ...actions, _handleBridgeMessage: handleBridgeMessage, _registerWsSend: registerWsSend, _onConnectionLost: onConnectionLost, _onConnectionRestored: onConnectionRestored } as any}>
