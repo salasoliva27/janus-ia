@@ -11,6 +11,7 @@ import type { FSWatcher } from "chokidar";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { McpSupervisor, defaultSidecars } from "./mcp-supervisor.js";
 
@@ -18,7 +19,7 @@ import { McpSupervisor, defaultSidecars } from "./mcp-supervisor.js";
 // derived from this file's own location so it works regardless of wrapper mode.
 // WORKSPACE_ROOT = the repo the bridge is serving (may differ from DASH_HOME
 // when launched via a wrapper in another repo).
-const DASH_HOME = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "..");
+const DASH_HOME = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || DASH_HOME;
 const WORKSPACE_NAME = path.basename(WORKSPACE_ROOT);
 const CLAUDE_PROJECT_DIR = WORKSPACE_ROOT.replace(/\//g, "-");
@@ -99,7 +100,7 @@ export function startServer(port: number): Promise<http.Server> {
   });
 
   // Serve frontend static files in production
-  const frontendDist = path.join(path.dirname(new URL(import.meta.url).pathname), "..", "frontend", "dist");
+  const frontendDist = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "frontend", "dist");
   if (fs.existsSync(frontendDist)) {
     app.use(express.static(frontendDist));
   }
@@ -301,17 +302,25 @@ export function startServer(port: number): Promise<http.Server> {
     }
   });
 
+  // Path helpers — the file APIs accept/emit forward-slash paths so the browser
+  // can round-trip them safely on any OS. On Windows, `path.join` produces
+  // backslashes; if we didn't normalize, the frontend would send backslash
+  // paths back and the `startsWith(WORKSPACE_ROOT)` guard would reject them.
+  const slash = (p: string) => p.replace(/\\/g, "/");
+  const WORKSPACE_ROOT_SLASH = slash(WORKSPACE_ROOT);
+  const isInsideWorkspace = (p: string) => slash(p).startsWith(WORKSPACE_ROOT_SLASH);
+
   // File API — read files for the editor
   app.get("/api/file", (req, res) => {
     const filePath = req.query.path as string;
-    if (!filePath || !filePath.startsWith(WORKSPACE_ROOT)) {
+    if (!filePath || !isInsideWorkspace(filePath)) {
       res.status(400).json({ error: "Invalid path" });
       return;
     }
     try {
       const content = fs.readFileSync(filePath, "utf-8");
       const stat = fs.statSync(filePath);
-      res.json({ path: filePath, content, size: stat.size, modified: stat.mtimeMs });
+      res.json({ path: slash(filePath), content, size: stat.size, modified: stat.mtimeMs });
     } catch (err) {
       res.status(404).json({ error: `File not found: ${filePath}` });
     }
@@ -320,7 +329,7 @@ export function startServer(port: number): Promise<http.Server> {
   // File API — write files from the editor
   app.post("/api/file", (req, res) => {
     const { path: filePath, content } = req.body;
-    if (!filePath || typeof filePath !== "string" || !filePath.startsWith("/workspaces/")) {
+    if (!filePath || typeof filePath !== "string" || !isInsideWorkspace(filePath)) {
       res.status(400).json({ error: "Invalid path" });
       return;
     }
@@ -331,7 +340,7 @@ export function startServer(port: number): Promise<http.Server> {
     try {
       fs.mkdirSync(path.dirname(filePath), { recursive: true });
       fs.writeFileSync(filePath, content, "utf-8");
-      res.json({ ok: true, path: filePath, size: content.length });
+      res.json({ ok: true, path: slash(filePath), size: content.length });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
@@ -340,7 +349,7 @@ export function startServer(port: number): Promise<http.Server> {
   // File API — list directory
   app.get("/api/files", (req, res) => {
     const dirPath = (req.query.path as string) || path.join(WORKSPACE_ROOT, "dashboard/frontend/src");
-    if (!dirPath.startsWith(WORKSPACE_ROOT)) {
+    if (!isInsideWorkspace(dirPath)) {
       res.status(400).json({ error: "Invalid path" });
       return;
     }
@@ -348,24 +357,23 @@ export function startServer(port: number): Promise<http.Server> {
       const entries = fs.readdirSync(dirPath, { withFileTypes: true });
       const items = entries.map(e => ({
         name: e.name,
-        path: path.join(dirPath, e.name),
+        path: slash(path.join(dirPath, e.name)),
         isDir: e.isDirectory(),
       })).sort((a, b) => {
         if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
         return a.name.localeCompare(b.name);
       });
-      res.json({ path: dirPath, items });
+      res.json({ path: slash(dirPath), items });
     } catch {
       res.status(404).json({ error: "Directory not found" });
     }
   });
 
   // File API — write a single file. Used by the document editor in the UI.
-  // Path-restricted to /workspaces/ to prevent escapes outside the codespace.
   app.post("/api/files/write", (req, res) => {
     const { path: filePath, content } = req.body || {};
-    if (typeof filePath !== "string" || !filePath.startsWith("/workspaces/")) {
-      res.status(400).json({ ok: false, error: "Invalid path — must be under /workspaces/" });
+    if (typeof filePath !== "string" || !isInsideWorkspace(filePath)) {
+      res.status(400).json({ ok: false, error: "Invalid path — must be inside the workspace" });
       return;
     }
     if (typeof content !== "string") {
@@ -376,7 +384,7 @@ export function startServer(port: number): Promise<http.Server> {
       fs.mkdirSync(path.dirname(filePath), { recursive: true });
       fs.writeFileSync(filePath, content, "utf8");
       const stat = fs.statSync(filePath);
-      res.json({ ok: true, path: filePath, size: stat.size, mtime: stat.mtimeMs });
+      res.json({ ok: true, path: slash(filePath), size: stat.size, mtime: stat.mtimeMs });
     } catch (err) {
       res.status(500).json({ ok: false, error: String(err) });
     }
@@ -396,14 +404,14 @@ export function startServer(port: number): Promise<http.Server> {
   // File API — move/rename
   app.post("/api/file/move", (req, res) => {
     const { from, to } = req.body;
-    if (!from || !to || !from.startsWith("/workspaces/") || !to.startsWith("/workspaces/")) {
+    if (!from || !to || !isInsideWorkspace(from) || !isInsideWorkspace(to)) {
       res.status(400).json({ error: "Invalid paths" });
       return;
     }
     try {
       fs.mkdirSync(path.dirname(to), { recursive: true });
       fs.renameSync(from, to);
-      res.json({ ok: true, from, to });
+      res.json({ ok: true, from: slash(from), to: slash(to) });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
@@ -1879,7 +1887,7 @@ function buildGraphFromFs(): { nodes: GraphNode[]; edges: { source: string; targ
 }
 
 function ensureHookConfig(port: number): void {
-  const configDir = path.join(path.dirname(new URL(import.meta.url).pathname), "..", ".claude");
+  const configDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".claude");
   const configPath = path.join(configDir, "settings.json");
   const hookUrl = `http://localhost:${port}/hooks/post-tool-use`;
 

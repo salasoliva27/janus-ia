@@ -35,13 +35,50 @@ PORT="${VENTURE_OS_PORT:-3100}"
 
 cd "$DASH"
 
-# Kill any stale process on the port
-pid=$(lsof -ti :$PORT 2>/dev/null || true)
-if [ -n "$pid" ]; then
-  kill $pid 2>/dev/null || true
-  echo "• killed stale process on :$PORT"
-  sleep 0.3
+# Ensure npm/npx are on PATH. On Windows Git Bash / MSYS, fresh shells won't see
+# the MSI-installed Node until restart — so probe common install locations and
+# prepend whichever one is present. Idempotent: no-op if npm is already found.
+if ! command -v npm >/dev/null 2>&1; then
+  for candidate in \
+    "/c/Program Files/nodejs" \
+    "/c/Program Files (x86)/nodejs" \
+    "$HOME/AppData/Local/Programs/nodejs" \
+    "$HOME/scoop/apps/nodejs/current"; do
+    if [ -x "$candidate/npm.cmd" ] || [ -x "$candidate/npm" ]; then
+      export PATH="$candidate:$PATH"
+      echo "• found node at $candidate"
+      break
+    fi
+  done
 fi
+if ! command -v npm >/dev/null 2>&1; then
+  echo "✗ npm not found. Install Node.js LTS (winget install OpenJS.NodeJS.LTS) and reopen the shell." >&2
+  exit 1
+fi
+
+# Kill any stale process on the port. lsof isn't available on Windows Git Bash,
+# so fall back to netstat + taskkill when running under MSYS/MINGW.
+kill_port() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    local pid
+    pid=$(lsof -ti :"$port" 2>/dev/null || true)
+    [ -n "$pid" ] && kill $pid 2>/dev/null || true
+    [ -n "$pid" ] && echo "• killed stale process on :$port"
+  elif command -v netstat >/dev/null 2>&1 && command -v taskkill >/dev/null 2>&1; then
+    # Windows: parse PID from `netstat -ano` LISTENING lines for this port
+    local pids
+    pids=$(netstat -ano | grep -E "LISTENING[[:space:]]+[0-9]+$" | grep -E ":$port[[:space:]]" | awk '{print $NF}' | sort -u)
+    if [ -n "$pids" ]; then
+      for pid in $pids; do
+        taskkill //F //PID "$pid" >/dev/null 2>&1 || true
+      done
+      echo "• killed stale process on :$port"
+    fi
+  fi
+}
+kill_port "$PORT"
+sleep 0.3
 
 # Install deps if missing
 if [ ! -d "node_modules" ]; then
