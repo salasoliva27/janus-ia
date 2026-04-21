@@ -112,14 +112,6 @@
       "headers": {
         "Authorization": "Bearer ${SUPABASE_ACCESS_TOKEN}"
       }
-    },
-    "b2-smoketest": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-fetch"
-      ],
-      "env": {}
     }
   }
 }
