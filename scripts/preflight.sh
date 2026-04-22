@@ -26,14 +26,18 @@ echo ""
 # ─── 1. MEMORY SYSTEM HEALTH ──────────────────────────────────
 echo "▸ MEMORY SYSTEMS"
 
-# Auto-memory (Claude Code built-in)
-MEMORY_COUNT=$(find "$MEMORY_DIR" -name "*.md" -not -name "MEMORY.md" 2>/dev/null | wc -l)
+# Auto-memory (Claude Code built-in) — dir may not exist yet on a fresh fork
+if [ -d "$MEMORY_DIR" ]; then
+  MEMORY_COUNT=$(find "$MEMORY_DIR" -name "*.md" -not -name "MEMORY.md" 2>/dev/null | wc -l || echo 0)
+else
+  MEMORY_COUNT=0
+fi
 echo "  Auto-memory files: ${MEMORY_COUNT}"
 
-# Supabase memory MCP
+# Supabase memory MCP — scoped to this workspace only
 if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_KEY" ]; then
   MEM_STATS=$(curl -s -m 5 \
-    "${SUPABASE_URL}/rest/v1/memories?select=type&limit=500" \
+    "${SUPABASE_URL}/rest/v1/memories?select=type&workspace=eq.${WORKSPACE_NAME}&limit=500" \
     -H "apikey: ${SUPABASE_KEY}" \
     -H "Authorization: Bearer ${SUPABASE_KEY}" 2>/dev/null || echo "FAIL")
 
@@ -51,9 +55,9 @@ print(', '.join(f'{t}:{c}' for t,c in counts.most_common()))
     echo "  Supabase memory: ✓ ${TOTAL} memories (${TYPES})"
   fi
 
-  # Check last memory date
+  # Check last memory date — scoped to this workspace
   LAST_MEM=$(curl -s -m 5 \
-    "${SUPABASE_URL}/rest/v1/memories?select=created_at&order=created_at.desc&limit=1" \
+    "${SUPABASE_URL}/rest/v1/memories?select=created_at&workspace=eq.${WORKSPACE_NAME}&order=created_at.desc&limit=1" \
     -H "apikey: ${SUPABASE_KEY}" \
     -H "Authorization: Bearer ${SUPABASE_KEY}" 2>/dev/null || echo "[]")
 
