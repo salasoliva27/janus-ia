@@ -35,6 +35,7 @@ const PROVIDERS: { id: string; label: string; color: string }[] = [
   { id: 'snowflake',  label: 'Snowflake',    color: 'oklch(0.75 0.14 210)' },
   { id: 'google',     label: 'Google',       color: 'oklch(0.72 0.16 265)' },
   { id: 'openai',     label: 'OpenAI',       color: 'oklch(0.70 0.15 155)' },
+  { id: 'gemini',     label: 'Gemini',       color: 'oklch(0.72 0.14 240)' },
   { id: 'github',     label: 'GitHub',       color: 'oklch(0.70 0.08 280)' },
   { id: 'search',     label: 'Search',       color: 'oklch(0.70 0.18 85)'  },
   { id: 'whatsapp',   label: 'WhatsApp',     color: 'oklch(0.74 0.16 150)' },
@@ -134,11 +135,22 @@ const DEFAULT_CREDENTIALS: CredentialEntry[] = [
     id: 'openai',
     provider: 'openai',
     name: 'OpenAI API',
-    scope: 'Call OpenAI models (chat, embeddings, images — whatever the key allows)',
+    scope: 'Call OpenAI models (chat, embeddings, images — whatever the key allows). Or sign in with your ChatGPT subscription below.',
     docsUrl: 'https://platform.openai.com/api-keys',
     howTo: 'Platform → API keys → Create new secret key. Pick a project; key is shown once.',
     fields: [
       { id: 'openai-key',            label: 'API Key',             envVar: 'OPENAI_API_KEY',              type: 'password', placeholder: 'sk-...' },
+    ],
+  },
+  {
+    id: 'gemini',
+    provider: 'gemini',
+    name: 'Google Gemini API',
+    scope: 'Call Gemini models via the Gemini CLI (gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash).',
+    docsUrl: 'https://aistudio.google.com/apikey',
+    howTo: 'Google AI Studio → Get API key → Create API key. Free tier available. (Gemini CLI also supports interactive Google account login on first run, but that flow isn\'t headless-friendly — use an API key here for the dashboard.)',
+    fields: [
+      { id: 'gemini-key',            label: 'API Key',             envVar: 'GEMINI_API_KEY',              type: 'password', placeholder: 'AIza...' },
     ],
   },
   {
@@ -222,7 +234,7 @@ const DEFAULT_CREDENTIALS: CredentialEntry[] = [
   },
 ];
 
-type ClaudeAuthStatus = {
+type SubscriptionAuthStatus = {
   loggedIn: boolean;
   authMethod?: string;
   apiProvider?: string;
@@ -233,45 +245,57 @@ type ClaudeAuthStatus = {
   error?: string;
 };
 
-function ClaudeSubscriptionPanel() {
-  const [status, setStatus] = useState<ClaudeAuthStatus | null>(null);
+type SubscriptionPanelProps = {
+  /** REST prefix under /api, e.g. "claude-auth" or "codex-auth" */
+  endpoint: string;
+  /** Heading shown above the button */
+  title: string;
+  /** Value of status.authMethod that means "subscription auth is live" */
+  subscriptionAuthMethod: string;
+  /** Bottom-line help text shown when nothing is in flight */
+  idleHint: React.ReactNode;
+  /** Env var whose presence forces API-key fallback at runtime (overrides subscription).
+   *  Only Claude has this quirk — pass null for providers where env+subscription coexist. */
+  envOverridesSubscription?: { envVar: string } | null;
+};
+
+function SubscriptionPanel({ endpoint, title, subscriptionAuthMethod, idleHint, envOverridesSubscription }: SubscriptionPanelProps) {
+  const [status, setStatus] = useState<SubscriptionAuthStatus | null>(null);
   const [phase, setPhase] = useState<'idle' | 'starting' | 'awaiting' | 'error'>('idle');
   const [url, setUrl] = useState<string | null>(null);
   const [errMsg, setErrMsg] = useState<string | null>(null);
 
   const refresh = async () => {
     try {
-      const r = await fetch('/api/claude-auth/status');
+      const r = await fetch(`/api/${endpoint}/status`);
       const d = await r.json();
       setStatus(d);
-      return d as ClaudeAuthStatus;
+      return d as SubscriptionAuthStatus;
     } catch {
       return null;
     }
   };
 
-  useEffect(() => {
-    refresh();
-  }, []);
+  useEffect(() => { refresh(); }, []);
 
   // Poll while waiting for the OAuth callback to land.
   useEffect(() => {
     if (phase !== 'awaiting') return;
     const t = window.setInterval(async () => {
       const d = await refresh();
-      if (d?.loggedIn && d.authMethod === 'claude.ai') {
+      if (d?.loggedIn && d.authMethod === subscriptionAuthMethod) {
         setPhase('idle');
         setUrl(null);
       }
     }, 2000);
     return () => window.clearInterval(t);
-  }, [phase]);
+  }, [phase, subscriptionAuthMethod]);
 
   const startLogin = async () => {
     setPhase('starting');
     setErrMsg(null);
     try {
-      const r = await fetch('/api/claude-auth/login', { method: 'POST' });
+      const r = await fetch(`/api/${endpoint}/login`, { method: 'POST' });
       const d = await r.json();
       if (!r.ok || !d.url) {
         setPhase('error');
@@ -289,7 +313,7 @@ function ClaudeSubscriptionPanel() {
 
   const signOut = async () => {
     try {
-      await fetch('/api/claude-auth/logout', { method: 'POST' });
+      await fetch(`/api/${endpoint}/logout`, { method: 'POST' });
     } finally {
       await refresh();
       setPhase('idle');
@@ -297,12 +321,12 @@ function ClaudeSubscriptionPanel() {
     }
   };
 
-  const subActive = status?.loggedIn && status?.authMethod === 'claude.ai';
+  const subActive = status?.loggedIn && status?.authMethod === subscriptionAuthMethod;
 
   return (
     <div className="credentials__sub-panel">
       <div className="credentials__sub-panel-head">
-        <span className="credentials__sub-panel-title">Claude subscription (Pro / Max)</span>
+        <span className="credentials__sub-panel-title">{title}</span>
         {subActive ? (
           <button className="credentials__test-btn credentials__test-btn--pass" onClick={signOut}>
             sign out
@@ -322,9 +346,9 @@ function ClaudeSubscriptionPanel() {
           ✓ Signed in
           {status?.email ? <> as <strong>{status.email}</strong></> : null}
           {status?.subscriptionType ? <> · plan: {status.subscriptionType}</> : null}
-          {status?.envKeySet && (
+          {envOverridesSubscription && status?.envKeySet && (
             <span className="credentials__sub-panel-warn">
-              {' '}— ANTHROPIC_API_KEY is set in env, which overrides subscription auth at runtime. Clear it from dotfiles if you want chat to use your subscription quota.
+              {' '}— {envOverridesSubscription.envVar} is set in env, which overrides subscription auth at runtime. Clear it from dotfiles if you want chat to use your subscription quota.
             </span>
           )}
         </div>
@@ -343,7 +367,7 @@ function ClaudeSubscriptionPanel() {
       )}
       {!subActive && phase === 'idle' && (
         <div className="credentials__sub-panel-line credentials__sub-panel-hint">
-          Sign in with your Anthropic account instead of pasting an API key. Same flow as <code>claude auth login</code>.
+          {idleHint}
         </div>
       )}
     </div>
@@ -795,7 +819,23 @@ export function Credentials({ onClose }: { onClose: () => void }) {
                         {save.message}
                       </div>
                     )}
-                    {entry.id === 'anthropic' && <ClaudeSubscriptionPanel />}
+                    {entry.id === 'anthropic' && (
+                      <SubscriptionPanel
+                        endpoint="claude-auth"
+                        title="Claude subscription (Pro / Max)"
+                        subscriptionAuthMethod="claude.ai"
+                        envOverridesSubscription={{ envVar: 'ANTHROPIC_API_KEY' }}
+                        idleHint={<>Sign in with your Anthropic account instead of pasting an API key. Same flow as <code>claude auth login</code>.</>}
+                      />
+                    )}
+                    {entry.id === 'openai' && (
+                      <SubscriptionPanel
+                        endpoint="codex-auth"
+                        title="ChatGPT subscription (Plus / Pro / Team)"
+                        subscriptionAuthMethod="chatgpt"
+                        idleHint={<>Sign in with your ChatGPT account to use your subscription quota instead of pasting an API key. Same flow as <code>codex login</code>.</>}
+                      />
+                    )}
                     <div className="credentials__scope">
                       <span className="credentials__scope-label">Grants:</span> {entry.scope}
                     </div>

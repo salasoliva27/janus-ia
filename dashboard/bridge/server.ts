@@ -183,7 +183,7 @@ export function startServer(port: number): Promise<http.Server> {
     }
     try {
       const { spawn } = await import("node:child_process");
-      const cleanEnv = { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0" };
+      const cleanEnv: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0" };
       delete cleanEnv.ANTHROPIC_API_KEY;
       const child = spawn("claude", ["auth", "login", "--claudeai"], {
         env: cleanEnv,
@@ -244,6 +244,129 @@ export function startServer(port: number): Promise<http.Server> {
       }
       const { execFile } = await import("node:child_process");
       execFile("claude", ["auth", "logout"], { timeout: 5_000 }, (err, stdout, stderr) => {
+        if (err) {
+          res.status(500).json({ ok: false, error: String(err.message ?? err), stderr: String(stderr).slice(0, 300) });
+          return;
+        }
+        res.json({ ok: true, output: stdout.trim() });
+      });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+
+  // ─── Codex (OpenAI) subscription auth ────────────────
+  // Mirrors the Claude flow: spawn `codex login`, parse the OAuth URL it
+  // prints, return it to the UI. The CLI hosts its own localhost callback.
+  // Tokens persist in ~/.codex/ — survive bridge restart and new shells.
+  let codexLoginChild: import("node:child_process").ChildProcess | null = null;
+  let codexLoginUrl: string | null = null;
+
+  app.get("/api/codex-auth/status", async (_req, res) => {
+    try {
+      const { execFile } = await import("node:child_process");
+      // `codex login status` returns plain text: "Logged in" or "Not logged in".
+      // OPENAI_API_KEY in env doesn't override OAuth the way Claude's does, but
+      // we still report envKeySet so the UI can call out the fallback path.
+      execFile("codex", ["login", "status"], { timeout: 5_000 }, (err, stdout, stderr) => {
+        if (err && !stdout) {
+          res.json({ loggedIn: false, error: String(err.message ?? err), envKeySet: !!process.env.OPENAI_API_KEY });
+          return;
+        }
+        const out = (stdout + stderr).trim();
+        const loggedIn = /logged\s*in/i.test(out) && !/not\s*logged\s*in/i.test(out);
+        // Try to extract auth method (ChatGPT OAuth vs API key) from output.
+        const isChatgpt = /chatgpt|oauth/i.test(out);
+        const isApiKey = /api[-_\s]?key/i.test(out);
+        const authMethod = loggedIn
+          ? (isChatgpt ? "chatgpt" : (isApiKey ? "api-key" : "unknown"))
+          : undefined;
+        const emailMatch = out.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+        const planMatch = out.match(/plan:?\s*([A-Za-z]+)/i);
+        res.json({
+          loggedIn,
+          authMethod,
+          email: emailMatch ? emailMatch[0] : null,
+          subscriptionType: planMatch ? planMatch[1] : null,
+          envKeySet: !!process.env.OPENAI_API_KEY,
+          raw: out.slice(0, 200),
+        });
+      });
+    } catch (err) {
+      res.status(500).json({ loggedIn: false, error: String(err) });
+    }
+  });
+
+  app.post("/api/codex-auth/login", async (_req, res) => {
+    if (codexLoginChild && !codexLoginChild.killed) {
+      res.json({ url: codexLoginUrl, alreadyRunning: true });
+      return;
+    }
+    try {
+      const { spawn } = await import("node:child_process");
+      // `codex login` (no flags) triggers ChatGPT OAuth browser flow and
+      // prints the auth URL on stdout/stderr. Strip OPENAI_API_KEY so the CLI
+      // doesn't short-circuit to API-key mode when one is present in env.
+      const cleanEnv: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0" };
+      delete cleanEnv.OPENAI_API_KEY;
+      const child = spawn("codex", ["login"], {
+        env: cleanEnv,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      codexLoginChild = child;
+      codexLoginUrl = null;
+
+      let buf = "";
+      let resolved = false;
+      const finish = (status: number, body: object) => {
+        if (resolved) return;
+        resolved = true;
+        res.status(status).json(body);
+      };
+
+      const tryExtractUrl = () => {
+        const clean = buf.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
+        // Match any of the OAuth URL shapes codex prints: chatgpt.com for the
+        // browser flow, auth.openai.com for device code, platform.openai.com
+        // as a secondary redirect host.
+        const m = clean.match(/https:\/\/(?:chatgpt\.com|auth\.openai\.com|platform\.openai\.com)\/[^\s\)\]\}>"']+/);
+        if (m) {
+          codexLoginUrl = m[0];
+          finish(200, { url: m[0] });
+        }
+      };
+
+      child.stdout?.on("data", (d) => { buf += d.toString(); tryExtractUrl(); });
+      child.stderr?.on("data", (d) => { buf += d.toString(); tryExtractUrl(); });
+      child.on("exit", () => {
+        codexLoginChild = null;
+        if (!resolved) finish(500, { error: "codex exited before printing a URL", raw: buf.slice(0, 500) });
+      });
+      child.on("error", (e) => {
+        codexLoginChild = null;
+        if (!resolved) finish(500, { error: String(e.message ?? e) });
+      });
+
+      setTimeout(() => {
+        if (!resolved) {
+          try { child.kill(); } catch { /* ignore */ }
+          finish(500, { error: "timed out waiting for OAuth URL", raw: buf.slice(0, 500) });
+        }
+      }, 8_000);
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.post("/api/codex-auth/logout", async (_req, res) => {
+    try {
+      if (codexLoginChild && !codexLoginChild.killed) {
+        try { codexLoginChild.kill(); } catch { /* ignore */ }
+        codexLoginChild = null;
+        codexLoginUrl = null;
+      }
+      const { execFile } = await import("node:child_process");
+      execFile("codex", ["logout"], { timeout: 5_000 }, (err, stdout, stderr) => {
         if (err) {
           res.status(500).json({ ok: false, error: String(err.message ?? err), stderr: String(stderr).slice(0, 300) });
           return;
