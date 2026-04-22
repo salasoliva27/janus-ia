@@ -169,9 +169,8 @@ echo "▸ resetting README.md → $FORK_NAME..."
 cat > "$REPO/README.md" <<TEMPLATE
 # $FORK_NAME
 
-Personal AI brain — initialized from the [janus-ia](https://github.com/salasoliva27/janus-ia)
-template. Built on Claude Code with an agent dispatch protocol, file-based
-memory, MCP integrations, and a workspace-aware dashboard.
+Personal AI brain. Built on Claude Code with an agent dispatch protocol,
+file-based memory, MCP integrations, and a workspace-aware dashboard.
 
 ## First run
 
@@ -199,14 +198,6 @@ CLAUDE.md       master brain — read this first
 
 \`CLAUDE.md\` is the source of truth for how the system behaves. Personalize
 it during discovery before doing real work.
-
----
-
-To pull updates from upstream janus-ia later:
-\`\`\`bash
-git remote add upstream https://github.com/salasoliva27/janus-ia.git
-git fetch upstream && git merge upstream/main
-\`\`\`
 TEMPLATE
 
 # ─── Self-anchor hook + MCP paths ─────────────────────────────
