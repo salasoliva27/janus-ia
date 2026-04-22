@@ -389,7 +389,7 @@ type TestState = { status: 'idle' | 'testing' | 'pass' | 'fail'; message?: strin
 
 type SaveState = { status: 'idle' | 'saving' | 'saved' | 'error'; message?: string };
 
-export function Credentials({ onClose }: { onClose: () => void }) {
+export function Credentials({ onClose, initialProviderId }: { onClose: () => void; initialProviderId?: string }) {
   const { tools, sendChatMessage } = useDashboard();
 
   // Per-field input state, keyed by field id.
@@ -478,9 +478,15 @@ export function Credentials({ onClose }: { onClose: () => void }) {
     return tool ? tool.configured === 'ready' : false;
   }
 
-  // Expand provider if it has any unset field.
+  // Expand provider if it has any unset field. When opened via the onboarding
+  // modal with an initialProviderId, collapse everything else and expand only
+  // the requested one so the user lands directly on what they clicked.
   const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
     const out: Record<string, boolean> = {};
+    if (initialProviderId) {
+      for (const p of PROVIDERS) out[p.id] = p.id === initialProviderId;
+      return out;
+    }
     for (const p of PROVIDERS) {
       const entries = DEFAULT_CREDENTIALS.filter(e => e.provider === p.id);
       const anyUnset = entries.some(e =>
