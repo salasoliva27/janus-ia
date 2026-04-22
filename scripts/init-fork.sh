@@ -200,6 +200,40 @@ CLAUDE.md       master brain — read this first
 it during discovery before doing real work.
 TEMPLATE
 
+# ─── Drop stale planning artifacts and project-specific agents ──
+echo "▸ removing stale planning + project-specific agents..."
+for d in "$REPO/.planning" "$REPO/dashboard/.planning" "$REPO/agents/legal"; do
+  if [ -d "$d" ]; then
+    rm -rf "$d"
+    echo "  removed ${d#$REPO/}"
+  fi
+done
+
+# ─── Bulk rewrite janus/Jano prose in user-facing markdown ──────
+# Derive a friendly owner name from the fork dir: "pablo-ia" → "Pablo".
+# Strips trailing -ia/-ai/-brain suffixes, then capitalizes.
+OWNER="$(echo "$FORK_NAME" | sed -E 's/-(ia|ai|brain)$//; s/^./\U&/')"
+DISPLAY="${OWNER} IA"
+echo "▸ rewriting brand references → owner=\"$OWNER\", display=\"$DISPLAY\"..."
+
+# Find user-facing markdown (skip .git, node_modules, dist, .planning).
+# Apply four ordered substitutions per file.
+find "$REPO" \
+  -path "$REPO/.git" -prune -o \
+  -path "*/node_modules" -prune -o \
+  -path "*/dist" -prune -o \
+  -path "*/.planning" -prune -o \
+  -type f -name "*.md" -print | while read -r f; do
+    # Order matters: longer/more-specific first to avoid partial overwrites.
+    sed -i \
+      -e "s|JANUS IA|$(echo "$DISPLAY" | tr '[:lower:]' '[:upper:]')|g" \
+      -e "s|Janus IA|$DISPLAY|g" \
+      -e "s|janus-ia|$FORK_NAME|g" \
+      -e "s|\bJano\b|$OWNER|g" \
+      "$f"
+  done
+echo "  rewrote brand refs across all user-facing .md"
+
 # ─── Self-anchor hook + MCP paths ─────────────────────────────
 # .claude/settings.json hooks and .mcp.json paths reference
 # /workspaces/janus-ia. Point them at this fork instead.
