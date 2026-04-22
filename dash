@@ -43,6 +43,7 @@ if ! command -v npm >/dev/null 2>&1; then
     "/c/Program Files/nodejs" \
     "/c/Program Files (x86)/nodejs" \
     "$HOME/AppData/Local/Programs/nodejs" \
+    "$HOME/bin/nodejs" \
     "$HOME/scoop/apps/nodejs/current"; do
     if [ -x "$candidate/npm.cmd" ] || [ -x "$candidate/npm" ]; then
       export PATH="$candidate:$PATH"
@@ -51,8 +52,46 @@ if ! command -v npm >/dev/null 2>&1; then
     fi
   done
 fi
+
+# Still no npm? Try to install Node.js automatically. Platform-specific:
+# Windows Git Bash → download portable zip to ~/bin/nodejs (no admin).
+# macOS → `brew install node` if brew present.
+# Linux → hint only (too many flavours to auto-pick safely).
 if ! command -v npm >/dev/null 2>&1; then
-  echo "✗ npm not found. Install Node.js LTS (winget install OpenJS.NodeJS.LTS) and reopen the shell." >&2
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+      echo "• node not found — installing portable Node.js LTS to ~/bin/nodejs"
+      NODE_VERSION="v20.19.5"
+      NODE_DIR="node-${NODE_VERSION}-win-x64"
+      NODE_URL="https://nodejs.org/dist/${NODE_VERSION}/${NODE_DIR}.zip"
+      TMPDIR="${TMPDIR:-/tmp}"
+      mkdir -p "$HOME/bin"
+      if curl -fsSL "$NODE_URL" -o "$TMPDIR/node.zip" \
+          && unzip -oq "$TMPDIR/node.zip" -d "$TMPDIR/" \
+          && rm -rf "$HOME/bin/nodejs" \
+          && mv "$TMPDIR/$NODE_DIR" "$HOME/bin/nodejs"; then
+        export PATH="$HOME/bin/nodejs:$PATH"
+        rm -f "$TMPDIR/node.zip"
+        echo "  ✓ installed Node.js $NODE_VERSION at ~/bin/nodejs"
+      else
+        echo "  ✗ portable Node.js install failed — install manually from https://nodejs.org/" >&2
+      fi
+      ;;
+    Darwin)
+      if command -v brew >/dev/null 2>&1; then
+        echo "• node not found — running: brew install node"
+        brew install node >/dev/null 2>&1 && echo "  ✓ node installed via brew"
+      else
+        echo "✗ node not found and Homebrew missing. Install Node from https://nodejs.org/ or: /bin/bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)\"" >&2
+      fi
+      ;;
+    *)
+      echo "✗ node not found. Install Node.js LTS (e.g. via nvm: https://github.com/nvm-sh/nvm) and re-run ./dash" >&2
+      ;;
+  esac
+fi
+if ! command -v npm >/dev/null 2>&1; then
+  echo "✗ npm still not on PATH after install attempt — open a new shell or adjust PATH and re-run ./dash" >&2
   exit 1
 fi
 
@@ -88,6 +127,42 @@ fi
 if [ ! -d "frontend/node_modules" ]; then
   echo "• installing frontend deps..."
   (cd frontend && npm install --silent)
+fi
+
+# Provider CLIs (claude / codex / gemini) — install any that aren't on PATH.
+# Each adapter in agent-registry.ts spawns these as subprocesses; if they're
+# missing, the corresponding agent silently fails. We install from npm rather
+# than prompting the user. Failures are non-fatal: the UI will show the
+# adapter as "not available" with a specific reason.
+#
+# Set DASH_SKIP_PROVIDER_INSTALL=1 to skip this block (e.g. CI, air-gapped).
+if [ -z "${DASH_SKIP_PROVIDER_INSTALL:-}" ]; then
+  install_cli() {
+    local cli="$1" pkg="$2"
+    if command -v "$cli" >/dev/null 2>&1; then return 0; fi
+    echo "• installing $cli ($pkg)..."
+    if npm install -g "$pkg" --silent >/dev/null 2>&1; then
+      if command -v "$cli" >/dev/null 2>&1; then
+        echo "  ✓ $cli ready"
+      else
+        # npm succeeded but the binary isn't on PATH yet — likely a fresh shell
+        # that hasn't picked up the global bin dir. Try to surface it.
+        local npm_bin
+        npm_bin=$(npm bin -g 2>/dev/null || true)
+        if [ -n "$npm_bin" ] && [ -x "$npm_bin/$cli" ]; then
+          export PATH="$npm_bin:$PATH"
+          echo "  ✓ $cli ready (added $npm_bin to PATH for this run)"
+        else
+          echo "  ⚠ $cli installed but not on PATH — open a new shell or add \$(npm bin -g) to PATH"
+        fi
+      fi
+    else
+      echo "  ⚠ $cli install failed — adapter will show as unavailable in the UI"
+    fi
+  }
+  install_cli claude "@anthropic-ai/claude-code"
+  install_cli codex  "@openai/codex"
+  install_cli gemini "@google/gemini-cli"
 fi
 
 # Rebuild frontend only if sources are newer than the built bundle
