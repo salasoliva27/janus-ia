@@ -222,6 +222,134 @@ const DEFAULT_CREDENTIALS: CredentialEntry[] = [
   },
 ];
 
+type ClaudeAuthStatus = {
+  loggedIn: boolean;
+  authMethod?: string;
+  apiProvider?: string;
+  apiKeySource?: string;
+  email?: string | null;
+  subscriptionType?: string | null;
+  envKeySet?: boolean;
+  error?: string;
+};
+
+function ClaudeSubscriptionPanel() {
+  const [status, setStatus] = useState<ClaudeAuthStatus | null>(null);
+  const [phase, setPhase] = useState<'idle' | 'starting' | 'awaiting' | 'error'>('idle');
+  const [url, setUrl] = useState<string | null>(null);
+  const [errMsg, setErrMsg] = useState<string | null>(null);
+
+  const refresh = async () => {
+    try {
+      const r = await fetch('/api/claude-auth/status');
+      const d = await r.json();
+      setStatus(d);
+      return d as ClaudeAuthStatus;
+    } catch {
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  // Poll while waiting for the OAuth callback to land.
+  useEffect(() => {
+    if (phase !== 'awaiting') return;
+    const t = window.setInterval(async () => {
+      const d = await refresh();
+      if (d?.loggedIn && d.authMethod === 'claude.ai') {
+        setPhase('idle');
+        setUrl(null);
+      }
+    }, 2000);
+    return () => window.clearInterval(t);
+  }, [phase]);
+
+  const startLogin = async () => {
+    setPhase('starting');
+    setErrMsg(null);
+    try {
+      const r = await fetch('/api/claude-auth/login', { method: 'POST' });
+      const d = await r.json();
+      if (!r.ok || !d.url) {
+        setPhase('error');
+        setErrMsg(d.error || 'failed to start login');
+        return;
+      }
+      setUrl(d.url);
+      setPhase('awaiting');
+      window.open(d.url, '_blank', 'noopener');
+    } catch (e) {
+      setPhase('error');
+      setErrMsg(String(e));
+    }
+  };
+
+  const signOut = async () => {
+    try {
+      await fetch('/api/claude-auth/logout', { method: 'POST' });
+    } finally {
+      await refresh();
+      setPhase('idle');
+      setUrl(null);
+    }
+  };
+
+  const subActive = status?.loggedIn && status?.authMethod === 'claude.ai';
+
+  return (
+    <div className="credentials__sub-panel">
+      <div className="credentials__sub-panel-head">
+        <span className="credentials__sub-panel-title">Claude subscription (Pro / Max)</span>
+        {subActive ? (
+          <button className="credentials__test-btn credentials__test-btn--pass" onClick={signOut}>
+            sign out
+          </button>
+        ) : (
+          <button
+            className="credentials__save-btn"
+            onClick={startLogin}
+            disabled={phase === 'starting' || phase === 'awaiting'}
+          >
+            {phase === 'starting' ? 'starting…' : phase === 'awaiting' ? 'waiting for browser…' : 'use subscription'}
+          </button>
+        )}
+      </div>
+      {subActive && (
+        <div className="credentials__sub-panel-line">
+          ✓ Signed in
+          {status?.email ? <> as <strong>{status.email}</strong></> : null}
+          {status?.subscriptionType ? <> · plan: {status.subscriptionType}</> : null}
+          {status?.envKeySet && (
+            <span className="credentials__sub-panel-warn">
+              {' '}— ANTHROPIC_API_KEY is set in env, which overrides subscription auth at runtime. Clear it from dotfiles if you want chat to use your subscription quota.
+            </span>
+          )}
+        </div>
+      )}
+      {!subActive && phase === 'awaiting' && url && (
+        <div className="credentials__sub-panel-line">
+          A browser tab opened. If it didn't,{' '}
+          <a href={url} target="_blank" rel="noreferrer noopener" className="credentials__howto-link">
+            click here ↗
+          </a>{' '}
+          to finish signing in. This panel will update automatically.
+        </div>
+      )}
+      {phase === 'error' && errMsg && (
+        <div className="credentials__test-error">{errMsg}</div>
+      )}
+      {!subActive && phase === 'idle' && (
+        <div className="credentials__sub-panel-line credentials__sub-panel-hint">
+          Sign in with your Anthropic account instead of pasting an API key. Same flow as <code>claude auth login</code>.
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function CredentialsButton({ onClick }: { onClick: () => void }) {
   return (
     <button className="credentials__trigger" onClick={onClick} title="Credentials">
@@ -536,6 +664,7 @@ export function Credentials({ onClose }: { onClose: () => void }) {
                         {save.message}
                       </div>
                     )}
+                    {entry.id === 'anthropic' && <ClaudeSubscriptionPanel />}
                     <div className="credentials__scope">
                       <span className="credentials__scope-label">Grants:</span> {entry.scope}
                     </div>

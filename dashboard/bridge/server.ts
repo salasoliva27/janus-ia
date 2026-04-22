@@ -143,6 +143,117 @@ export function startServer(port: number): Promise<http.Server> {
     }
   });
 
+  // ─── Claude subscription auth (drives `claude auth ...` CLI) ────
+  // Holds the active `claude auth login` child while we wait for the user
+  // to complete the OAuth flow in their browser. One at a time.
+  let claudeLoginChild: import("node:child_process").ChildProcess | null = null;
+  let claudeLoginUrl: string | null = null;
+
+  app.get("/api/claude-auth/status", async (_req, res) => {
+    // claude auth status hides OAuth subscription details when ANTHROPIC_API_KEY
+    // is in env (env wins, so it reports the env source instead). Strip the env
+    // var for this probe so the UI sees the true subscription state.
+    const cleanEnv = { ...process.env };
+    delete cleanEnv.ANTHROPIC_API_KEY;
+    try {
+      const { execFile } = await import("node:child_process");
+      execFile("claude", ["auth", "status", "--json"], { env: cleanEnv, timeout: 5_000 }, (err, stdout) => {
+        if (err && !stdout) {
+          res.json({ loggedIn: false, error: String(err.message ?? err) });
+          return;
+        }
+        try {
+          const parsed = JSON.parse(stdout);
+          res.json({ ...parsed, envKeySet: !!process.env.ANTHROPIC_API_KEY });
+        } catch {
+          res.json({ loggedIn: false, error: "could not parse claude output", raw: stdout.slice(0, 200) });
+        }
+      });
+    } catch (err) {
+      res.status(500).json({ loggedIn: false, error: String(err) });
+    }
+  });
+
+  app.post("/api/claude-auth/login", async (_req, res) => {
+    if (claudeLoginChild && !claudeLoginChild.killed) {
+      // Already mid-flow — return the same URL so the UI can re-open it.
+      res.json({ url: claudeLoginUrl, alreadyRunning: true });
+      return;
+    }
+    try {
+      const { spawn } = await import("node:child_process");
+      const cleanEnv = { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0" };
+      delete cleanEnv.ANTHROPIC_API_KEY;
+      const child = spawn("claude", ["auth", "login", "--claudeai"], {
+        env: cleanEnv,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      claudeLoginChild = child;
+      claudeLoginUrl = null;
+
+      let buf = "";
+      let resolved = false;
+      const finish = (status: number, body: object) => {
+        if (resolved) return;
+        resolved = true;
+        res.status(status).json(body);
+      };
+
+      const tryExtractUrl = () => {
+        // Strip ANSI escapes that --claudeai sometimes still emits, then look
+        // for the first https://claude.ai/... URL.
+        const clean = buf.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
+        const m = clean.match(/https:\/\/(?:claude\.ai|console\.anthropic\.com)\/[^\s\)\]\}>"']+/);
+        if (m) {
+          claudeLoginUrl = m[0];
+          finish(200, { url: m[0] });
+        }
+      };
+
+      child.stdout?.on("data", (d) => { buf += d.toString(); tryExtractUrl(); });
+      child.stderr?.on("data", (d) => { buf += d.toString(); tryExtractUrl(); });
+      child.on("exit", () => {
+        claudeLoginChild = null;
+        if (!resolved) finish(500, { error: "claude exited before printing a URL", raw: buf.slice(0, 500) });
+      });
+      child.on("error", (e) => {
+        claudeLoginChild = null;
+        if (!resolved) finish(500, { error: String(e.message ?? e) });
+      });
+
+      // Safety: if no URL appears in 8s, give up.
+      setTimeout(() => {
+        if (!resolved) {
+          try { child.kill(); } catch { /* ignore */ }
+          finish(500, { error: "timed out waiting for OAuth URL", raw: buf.slice(0, 500) });
+        }
+      }, 8_000);
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.post("/api/claude-auth/logout", async (_req, res) => {
+    try {
+      // Kill any in-flight login so it doesn't write fresh creds after we logout.
+      if (claudeLoginChild && !claudeLoginChild.killed) {
+        try { claudeLoginChild.kill(); } catch { /* ignore */ }
+        claudeLoginChild = null;
+        claudeLoginUrl = null;
+      }
+      const { execFile } = await import("node:child_process");
+      execFile("claude", ["auth", "logout"], { timeout: 5_000 }, (err, stdout, stderr) => {
+        if (err) {
+          res.status(500).json({ ok: false, error: String(err.message ?? err), stderr: String(stderr).slice(0, 300) });
+          return;
+        }
+        res.json({ ok: true, output: stdout.trim() });
+      });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+
   // Detect active ports
   app.get("/api/ports", async (_req, res) => {
     try {

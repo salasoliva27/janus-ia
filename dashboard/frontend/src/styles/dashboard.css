@@ -3005,6 +3005,44 @@
   border-radius: 0 var(--border-radius-sm) var(--border-radius-sm) 0;
   word-break: break-word;
 }
+.credentials__sub-panel {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: color-mix(in oklch, var(--color-accent) 6%, transparent);
+  border: 1px solid color-mix(in oklch, var(--color-accent) 25%, transparent);
+  border-radius: var(--border-radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.credentials__sub-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.credentials__sub-panel-title {
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  color: var(--color-text);
+  font-weight: 600;
+}
+.credentials__sub-panel-line {
+  font-family: var(--font-family-mono);
+  font-size: 10px;
+  color: var(--color-text-dim);
+  line-height: 1.5;
+}
+.credentials__sub-panel-line strong {
+  color: var(--color-text);
+  font-weight: 600;
+}
+.credentials__sub-panel-hint {
+  opacity: 0.7;
+}
+.credentials__sub-panel-warn {
+  color: var(--color-warning, oklch(0.78 0.16 75));
+}
 .credentials__entry-actions {
   display: flex;
   align-items: center;
