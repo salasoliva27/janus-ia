@@ -34,19 +34,18 @@ cat <<EOF
 ┌──────────────────────────────────────────────────────────┐
 │  JANUS FORK BOOTSTRAP                                     │
 ├──────────────────────────────────────────────────────────┤
-│  About to strip Jano-specific content from this fork:    │
-│    - wiki/          (his project-specific pages)          │
+│  Stripping Jano-specific content:                         │
+│    - wiki/          (his project pages)                   │
 │    - projects/      (his dev/uat/prod tracking)           │
 │    - outputs/       (his generated docs + screenshots)    │
 │    - dump/          (his inbox)                           │
+│    - concepts/*     (his accumulated cross-project nodes) │
 │  Resetting to empty templates:                            │
 │    - PROJECTS.md                                          │
-│    - learnings/market.md  (Mexico-specific)               │
-│    - learnings/supabase-registry.md  (his schema)         │
+│    - learnings/* (all his accumulated findings)           │
 │                                                           │
-│  Keeping the agent framework:                             │
-│    ✓ CLAUDE.md, agents/, concepts/                        │
-│    ✓ learnings/patterns.md, technical.md, gtm.md          │
+│  Keeping the framework:                                   │
+│    ✓ CLAUDE.md, agents/                                   │
 │    ✓ scripts/, dashboard/, mcp-servers/                   │
 │    ✓ tools/registry.md, skills/registry.md                │
 │                                                           │
@@ -71,6 +70,29 @@ for d in wiki projects outputs dump; do
     echo "  removed $d/"
   fi
 done
+
+# concepts/ is Jano's accumulated cross-project nodes. Wipe contents but
+# keep the directory so the agent framework's [[concepts/...]] links still
+# resolve to a real folder once Pablo writes his own.
+if [ -d "$REPO/concepts" ]; then
+  rm -f "$REPO/concepts"/*.md
+  echo "  emptied concepts/"
+fi
+
+# agents/domain/ holds project-specific agents (e.g. nutrition for nutri-ai).
+# core agents are universal roles and stay.
+if [ -d "$REPO/agents/domain" ]; then
+  rm -f "$REPO/agents/domain"/*.md
+  echo "  emptied agents/domain/"
+fi
+
+# Wipe any pre-existing learnings — every file in here gets reset to a stub
+# below. This catches Jano-specific files (patterns.md, technical.md,
+# mcp-registry.md, gtm.md) without us having to enumerate them by name.
+if [ -d "$REPO/learnings" ]; then
+  rm -f "$REPO/learnings"/*.md
+  echo "  emptied learnings/"
+fi
 
 echo "▸ resetting templates..."
 cat > "$REPO/PROJECTS.md" <<'TEMPLATE'
@@ -135,9 +157,6 @@ No active projects yet. Add bullets like:
 Total: 0 sessions queued.
 Rule: capacity-aware intake — flag new requests when backlog is full.
 TEMPLATE
-
-# Drop dated session-artifact files
-find "$REPO/learnings" -maxdepth 1 -name "self-improvement-session-*.md" -delete 2>/dev/null || true
 
 if [ -f "$REPO/CHANGELOG.md" ]; then
   echo "▸ resetting CHANGELOG.md..."

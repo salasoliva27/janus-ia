@@ -128,7 +128,7 @@ export function startServer(port: number): Promise<http.Server> {
         res.status(500).json({ error: "SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing", nodes: [], edges: [] });
         return;
       }
-      const resp = await fetch(`${url.replace(/\/+$/, "")}/rest/v1/brain_events?select=tool_name,workspace,project,status,created_at&order=created_at.desc&limit=2000`, {
+      const resp = await fetch(`${url.replace(/\/+$/, "")}/rest/v1/brain_events?select=tool_name,workspace,project,status,created_at&workspace=eq.${encodeURIComponent(WORKSPACE_NAME)}&order=created_at.desc&limit=2000`, {
         headers: { apikey: key, Authorization: `Bearer ${key}` },
       });
       if (!resp.ok) {
