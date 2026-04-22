@@ -414,6 +414,21 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     persistTimer.current = setTimeout(() => persistState(state), 500);
   }, [state]);
 
+  // ── On mount: clear janus-ia-only seed data when running in a fork ────
+  // PROJECTS, NOTIFICATIONS, and LEARNINGS are seeded with Jano's content
+  // so his dashboard renders with real data on first paint. Forks should
+  // start blank — they personalize via discovery.
+  useEffect(() => {
+    fetch('/api/workspace')
+      .then(r => r.json())
+      .then((d: { name?: string }) => {
+        if (d?.name && d.name !== 'janus-ia') {
+          setState(s => ({ ...s, projects: [], notifications: [], learnings: [] }));
+        }
+      })
+      .catch(() => { /* bridge may be warming up */ });
+  }, []);
+
   // ── Fetch auto-memory index (shown in chat header) ────
   useEffect(() => {
     let cancelled = false;

@@ -144,6 +144,64 @@ if [ -f "$REPO/CHANGELOG.md" ]; then
   echo "# Changelog" > "$REPO/CHANGELOG.md"
 fi
 
+# ─── Rewrite README to a generic template ─────────────────────
+FORK_NAME="$(basename "$REPO")"
+echo "▸ resetting README.md → $FORK_NAME..."
+cat > "$REPO/README.md" <<TEMPLATE
+# $FORK_NAME
+
+Personal AI brain — initialized from the [janus-ia](https://github.com/salasoliva27/janus-ia)
+template. Built on Claude Code with an agent dispatch protocol, file-based
+memory, MCP integrations, and a workspace-aware dashboard.
+
+## First run
+
+\`\`\`bash
+./dash              # launch the dashboard
+\`\`\`
+
+In the first chat turn, tell the AI: **\`run discovery\`**. It will walk you
+through declaring your projects, your stack, and personalizing the agents in
+\`agents/\` and \`CLAUDE.md\` for your work.
+
+## Layout
+
+\`\`\`
+agents/         agent specs (developer, ux, legal, financial, ...)
+concepts/       cross-project patterns (the compounding layer)
+learnings/      domain knowledge (market, technical, gtm, patterns)
+dashboard/      the UI you launch with ./dash
+mcp-servers/    local MCP servers (memory, etc.)
+scripts/        bootstrap, preflight, gdrive, dash-link, init-fork
+tools/          tool registry + configs
+skills/         skills registry
+CLAUDE.md       master brain — read this first
+\`\`\`
+
+\`CLAUDE.md\` is the source of truth for how the system behaves. Personalize
+it during discovery before doing real work.
+
+---
+
+To pull updates from upstream janus-ia later:
+\`\`\`bash
+git remote add upstream https://github.com/salasoliva27/janus-ia.git
+git fetch upstream && git merge upstream/main
+\`\`\`
+TEMPLATE
+
+# ─── Self-anchor hook + MCP paths ─────────────────────────────
+# .claude/settings.json hooks and .mcp.json paths reference
+# /workspaces/janus-ia. Point them at this fork instead.
+echo "▸ rewriting hardcoded /workspaces/janus-ia paths..."
+for f in "$REPO/.claude/settings.json" "$REPO/.mcp.json"; do
+  if [ -f "$f" ]; then
+    # Use | as sed delimiter since paths contain /
+    sed -i "s|/workspaces/janus-ia|$REPO|g" "$f"
+    echo "  rewrote $f"
+  fi
+done
+
 echo ""
 echo "✓ fork initialized."
 echo ""
