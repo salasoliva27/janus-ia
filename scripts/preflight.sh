@@ -12,7 +12,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 WORKSPACE="${WORKSPACE_ROOT:-$SCRIPT_DIR}"
 WORKSPACE_NAME="$(basename "$WORKSPACE")"
-CLAUDE_PROJECT_DIR="$(echo "$WORKSPACE" | sed 's|/|-|g')"
+CLAUDE_PROJECT_DIR="$(echo "$WORKSPACE" | sed 's|[/:]|-|g')"
 MEMORY_DIR="$HOME/.claude/projects/$CLAUDE_PROJECT_DIR/memory"
 SUPABASE_URL="${SUPABASE_URL:-}"
 SUPABASE_KEY="${SUPABASE_SERVICE_ROLE_KEY:-}"
@@ -187,19 +187,15 @@ echo ""
 # ─── 4. ACTIVE PROJECT SNAPSHOT ───────────────────────────────
 echo "▸ ACTIVE PROJECTS (from cross-project-map)"
 if [ -f "$WORKSPACE/learnings/cross-project-map.md" ]; then
-  # Extract capacity section
-  python3 -c "
-import re
-with open('$WORKSPACE/learnings/cross-project-map.md') as f:
-    content = f.read()
-cap = re.search(r'## Capacity.*?(?=\n## |\Z)', content, re.DOTALL)
-if cap:
-    lines = cap.group().strip().split('\n')
-    for line in lines[1:]:
-        line = line.strip()
-        if line.startswith('-') or line.startswith('Rule:') or line.startswith('Total:'):
-            print(f'  {line}')
-" 2>/dev/null
+  # Extract ## Capacity section — pure awk so this works without python3
+  awk '
+    /^## Capacity/ { inCap=1; next }
+    inCap && /^## / { inCap=0 }
+    inCap {
+      sub(/^[[:space:]]+/, "")
+      if (/^-/ || /^Rule:/ || /^Total:/) print "  " $0
+    }
+  ' "$WORKSPACE/learnings/cross-project-map.md" 2>/dev/null || true
 fi
 
 echo ""
@@ -318,4 +314,43 @@ try:
 except Exception:
     pass
 " 2>/dev/null
+fi
+
+# ─── 7. FILE-BASED MEMORY FALLBACK (Windows / no-MCP) ─────────
+# When Supabase + janus-memory MCP aren't available, the only memory store
+# is the file-based auto-memory dir. Surface the index + recent corrections
+# so future sessions still see what prior sessions learned.
+if [ -d "$MEMORY_DIR" ] && [ -z "$SUPABASE_URL" ]; then
+  echo ""
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "▸ FILE-BASED MEMORY  (Supabase unavailable — this is the live store)"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "  Path: $MEMORY_DIR"
+  echo ""
+
+  # Show MEMORY.md index so the agent knows what's been captured
+  if [ -f "$MEMORY_DIR/MEMORY.md" ]; then
+    echo "  MEMORY.md index:"
+    sed 's/^/    /' "$MEMORY_DIR/MEMORY.md"
+    echo ""
+  fi
+
+  # Surface any correction_* / feedback_* memories — the rules learned
+  CORRECTION_FILES=$(find "$MEMORY_DIR" -maxdepth 1 -type f \( -name "correction_*.md" -o -name "feedback_*.md" \) 2>/dev/null | sort)
+  if [ -n "$CORRECTION_FILES" ]; then
+    echo "  RECENT CORRECTIONS / FEEDBACK (do not repeat):"
+    for f in $CORRECTION_FILES; do
+      NAME=$(grep -m1 '^name:' "$f" 2>/dev/null | sed 's/^name: *//')
+      [ -z "$NAME" ] && NAME=$(basename "$f" .md)
+      echo "    → $NAME"
+    done
+    echo ""
+  fi
+
+  echo "  ACTION: To capture a new memory, use the Write tool:"
+  echo "    1. Write a new file under \$MEMORY_DIR/ with frontmatter (name, description, type)"
+  echo "    2. Append a one-line pointer to MEMORY.md"
+  echo "  mcp__janus-memory__* tools are NOT available on this machine — use file I/O."
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo ""
 fi

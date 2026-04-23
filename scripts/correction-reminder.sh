@@ -16,16 +16,10 @@
 
 set -uo pipefail
 
-INPUT=$(cat)
+# shellcheck disable=SC1091
+. "$(dirname "$0")/_parse_prompt.sh"
 
-PROMPT=$(echo "$INPUT" | python3 -c "
-import json, sys
-try:
-    d = json.loads(sys.stdin.read())
-    print(d.get('prompt', '') or d.get('user_message', ''))
-except Exception:
-    print('')
-" 2>/dev/null)
+PROMPT=$(parse_prompt)
 
 [ -z "$PROMPT" ] && exit 0
 
@@ -51,8 +45,10 @@ fi
 
 [ $MATCH -eq 0 ] && exit 0
 
-# Emit additional context
-cat <<'EOF'
+# Detect memory system: if Supabase env is missing, we're on the file-based
+# setup (Windows / no janus-memory MCP). Swap the advice accordingly.
+if [ -n "${SUPABASE_URL:-}" ] && [ -n "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+  cat <<'EOF'
 ▸ CORRECTION-REMINDER: this prompt contains a redirect pattern. Per CLAUDE.md evolution rule #4: write the correction BEFORE the fix.
 
 Before editing any code or responding to the correction itself:
@@ -63,3 +59,32 @@ Diagnostic 2026-04-20: only 4/61 memories are corrections (6.5%). This rule was 
 
 False positive? If this prompt is not actually a correction (just a word that triggered the pattern), skip the capture and proceed normally. Non-blocking.
 EOF
+else
+  # Figure out the memory dir so the instruction is copy-pasteable
+  SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+  WORKSPACE="${WORKSPACE_ROOT:-$SCRIPT_DIR}"
+  CLAUDE_PROJECT_DIR="$(echo "$WORKSPACE" | sed 's|[/:]|-|g')"
+  MEMORY_DIR="$HOME/.claude/projects/$CLAUDE_PROJECT_DIR/memory"
+  cat <<EOF
+▸ CORRECTION-REMINDER: this prompt contains a redirect pattern. Per CLAUDE.md evolution rule #4: write the correction BEFORE the fix.
+
+The janus-memory MCP is NOT available on this machine. Use file-based capture:
+  1. Write tool → \`$MEMORY_DIR/correction_<slug>.md\` with frontmatter:
+       ---
+       name: <short name>
+       description: <one-line trigger — so future-you decides relevance>
+       type: correction
+       ---
+       **Original**: what I did / was about to do
+       **Correction**: what Jano said
+       **Why**: why this matters for future sessions
+       **How to apply**: when/where this rule kicks in
+  2. Append a one-line pointer to \`$MEMORY_DIR/MEMORY.md\`:
+       - [<name>](correction_<slug>.md) — <hook>
+  3. THEN address what the user asked
+
+Rule (CLAUDE.md evolution #4): write the correction BEFORE the fix — not after. If you code first and memory-capture last, the capture gets skipped and you repeat the mistake next session.
+
+False positive? If this prompt is not actually a correction, skip and proceed normally. Non-blocking.
+EOF
+fi

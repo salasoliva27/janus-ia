@@ -15,17 +15,10 @@
 
 set -uo pipefail
 
-INPUT=$(cat)
+# shellcheck disable=SC1091
+. "$(dirname "$0")/_parse_prompt.sh"
 
-# Extract the user's prompt text
-PROMPT=$(echo "$INPUT" | python3 -c "
-import json, sys
-try:
-    d = json.loads(sys.stdin.read())
-    print(d.get('prompt', '') or d.get('user_message', ''))
-except Exception:
-    print('')
-" 2>/dev/null)
+PROMPT=$(parse_prompt)
 
 [ -z "$PROMPT" ] && exit 0
 
