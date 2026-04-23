@@ -842,10 +842,14 @@ export function startServer(port: number): Promise<http.Server> {
     }
   });
 
-  // Credentials save — writes env vars to the dotfiles .env, mirrors to ~/.env
-  // and process.env, then commits + pushes to origin and grep-verifies the
-  // values landed. Per the 2026-04-16 correction rule, nothing is reported as
-  // "saved" unless all four steps succeed (write + commit + push + verify).
+  // Credentials save — writes env vars to the most appropriate .env file:
+  //   1. Jano's Codespace dotfiles repo (sync'd across all his Codespaces)
+  //      → commits + pushes + grep-verifies (4-step gate)
+  //   2. If dotfiles dir doesn't exist (template/blank-slate fork), falls
+  //      back to <WORKSPACE_ROOT>/.env — secrets stay local, no commit
+  //      (and we make sure .env is gitignored so they don't leak)
+  // process.env is updated either way so the running bridge sees the new
+  // values on the next request without restart.
   app.post("/api/credentials/save", async (req, res) => {
     const body = (req.body || {}) as { fields?: Array<{ envVar?: unknown; value?: unknown }> };
     const fields = Array.isArray(body.fields) ? body.fields : [];
@@ -874,11 +878,15 @@ export function startServer(port: number): Promise<http.Server> {
     const DOTFILES_DIR = "/workspaces/.codespaces/.persistedshare/dotfiles";
     const DOTFILES_ENV = path.join(DOTFILES_DIR, ".env");
     const HOME_ENV = path.join(os.homedir(), ".env");
+    const REPO_ENV = path.join(WORKSPACE_ROOT, ".env");
+    const REPO_GITIGNORE = path.join(WORKSPACE_ROOT, ".gitignore");
 
-    if (!fs.existsSync(DOTFILES_ENV)) {
-      res.status(500).json({ ok: false, error: `Dotfiles .env not found at ${DOTFILES_ENV}` });
-      return;
-    }
+    // Mode select: dotfiles repo if present, else local repo .env. The
+    // dotfiles path is owner-specific (Jano's Codespace setup) — anyone
+    // forking this template won't have it, so we write to their repo
+    // root and never commit secrets into source control.
+    const useDotfiles = fs.existsSync(DOTFILES_ENV);
+    const TARGET_ENV = useDotfiles ? DOTFILES_ENV : REPO_ENV;
 
     // Double-quote-safe shell escaping: preserve the value verbatim when the
     // file is sourced by bash. Must escape \ " $ ` so the shell doesn't
@@ -892,10 +900,14 @@ export function startServer(port: number): Promise<http.Server> {
       return `"${escaped}"`;
     };
 
-    // Upsert each env var into the file contents, preserving order and
-    // surrounding lines. If a line already defines the var, replace it in
-    // place; otherwise append at the end.
-    let contents = fs.readFileSync(DOTFILES_ENV, "utf-8");
+    // Ensure the target file exists and read current contents.
+    let contents = "";
+    if (fs.existsSync(TARGET_ENV)) {
+      contents = fs.readFileSync(TARGET_ENV, "utf-8");
+    }
+
+    // Upsert each env var, preserving order and surrounding lines. If a line
+    // already defines the var, replace it in place; otherwise append at end.
     const written: string[] = [];
     for (const { envVar, value } of clean) {
       const lineRe = new RegExp(`^(?:export\\s+)?${envVar}=.*$`, "m");
@@ -903,15 +915,30 @@ export function startServer(port: number): Promise<http.Server> {
       if (lineRe.test(contents)) {
         contents = contents.replace(lineRe, newLine);
       } else {
-        if (!contents.endsWith("\n")) contents += "\n";
+        if (contents.length > 0 && !contents.endsWith("\n")) contents += "\n";
         contents += newLine + "\n";
       }
       written.push(envVar);
     }
 
     try {
-      fs.writeFileSync(DOTFILES_ENV, contents, { encoding: "utf-8", mode: 0o600 });
-      fs.writeFileSync(HOME_ENV, contents, { encoding: "utf-8", mode: 0o600 });
+      fs.writeFileSync(TARGET_ENV, contents, { encoding: "utf-8", mode: 0o600 });
+      // Mirror to ~/.env only when we own the dotfiles flow — otherwise we
+      // could clobber another tenant's home env.
+      if (useDotfiles) {
+        fs.writeFileSync(HOME_ENV, contents, { encoding: "utf-8", mode: 0o600 });
+      }
+      // In repo-local mode, make sure .env is gitignored so the user's
+      // secrets don't get accidentally committed into a public template.
+      if (!useDotfiles) {
+        let gi = fs.existsSync(REPO_GITIGNORE) ? fs.readFileSync(REPO_GITIGNORE, "utf-8") : "";
+        const hasEnv = gi.split("\n").some(l => l.trim() === ".env");
+        if (!hasEnv) {
+          if (gi.length > 0 && !gi.endsWith("\n")) gi += "\n";
+          gi += ".env\n";
+          fs.writeFileSync(REPO_GITIGNORE, gi, "utf-8");
+        }
+      }
       for (const { envVar, value } of clean) {
         process.env[envVar] = value;
       }
@@ -920,6 +947,36 @@ export function startServer(port: number): Promise<http.Server> {
       return;
     }
 
+    // Grep-verify: re-read the file and confirm every env var we claimed to
+    // save is physically present with the expected value.
+    const onDisk = fs.readFileSync(TARGET_ENV, "utf-8");
+    const verified: string[] = [];
+    const missing: string[] = [];
+    for (const { envVar, value } of clean) {
+      const expected = `export ${envVar}=${shellQuote(value)}`;
+      if (onDisk.split("\n").includes(expected)) verified.push(envVar);
+      else missing.push(envVar);
+    }
+
+    // Repo-local mode: write-and-verify is the whole gate. No commit; the
+    // user's .env stays out of git so secrets don't leak.
+    if (!useDotfiles) {
+      const allVerified = missing.length === 0;
+      res.json({
+        ok: allVerified,
+        saved: allVerified ? written : [],
+        staged: !allVerified ? written : [],
+        verified,
+        missing,
+        target: TARGET_ENV,
+        mode: "repo-local",
+        committed: false,
+        pushed: false,
+      });
+      return;
+    }
+
+    // Dotfiles mode: full 4-step gate (write + commit + push + verify).
     const { execFileSync } = await import("node:child_process");
     const git = (args: string[]): { ok: boolean; out: string } => {
       try {
@@ -948,17 +1005,6 @@ export function startServer(port: number): Promise<http.Server> {
     const commitSha = commitRes.ok ? git(["rev-parse", "HEAD"]).out.trim() : null;
     const pushRes = git(["push", "origin", "HEAD"]);
 
-    // Grep-verify: re-read the committed file and confirm every env var we
-    // claimed to save is physically present with the expected value.
-    const onDisk = fs.readFileSync(DOTFILES_ENV, "utf-8");
-    const verified: string[] = [];
-    const missing: string[] = [];
-    for (const { envVar, value } of clean) {
-      const expected = `export ${envVar}=${shellQuote(value)}`;
-      if (onDisk.split("\n").includes(expected)) verified.push(envVar);
-      else missing.push(envVar);
-    }
-
     const allVerified = missing.length === 0;
     const fullySaved = allVerified && commitRes.ok && pushRes.ok;
     res.json({
@@ -967,12 +1013,196 @@ export function startServer(port: number): Promise<http.Server> {
       staged: !fullySaved ? written : [],
       verified,
       missing,
+      target: TARGET_ENV,
+      mode: "dotfiles",
       commit: commitSha,
       committed: commitRes.ok,
       pushed: pushRes.ok,
       commitOutput: commitRes.out.slice(0, 500),
       pushOutput: pushRes.out.slice(0, 500),
     });
+  });
+
+  // Custom tools registry — definitions for user-added tools (e.g. "Postmark").
+  // Stored at <WORKSPACE_ROOT>/.dashboard/custom-tools.json so they survive
+  // page reloads and can be shared across browsers/sessions on the same repo.
+  // Only the *definition* lives here (env var names, MCP spec template, docs
+  // link). Actual secret values still go to .env via /api/credentials/save.
+  const TOOLS_REGISTRY_PATH = path.join(WORKSPACE_ROOT, ".dashboard", "custom-tools.json");
+
+  type CustomToolField = {
+    id: string;
+    label: string;
+    envVar: string;
+    type: "password" | "text";
+    placeholder?: string;
+  };
+  type CustomToolEntry = {
+    id: string;
+    name: string;
+    scope: string;
+    docsUrl?: string;
+    fields: CustomToolField[];
+    mcp?: { name: string; spec: Record<string, unknown> };
+    createdAt: string;
+  };
+
+  function readToolsRegistry(): CustomToolEntry[] {
+    if (!fs.existsSync(TOOLS_REGISTRY_PATH)) return [];
+    try {
+      const raw = fs.readFileSync(TOOLS_REGISTRY_PATH, "utf-8");
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed?.entries) ? parsed.entries : [];
+    } catch { return []; }
+  }
+
+  function writeToolsRegistry(entries: CustomToolEntry[]): void {
+    const dir = path.dirname(TOOLS_REGISTRY_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(TOOLS_REGISTRY_PATH, JSON.stringify({ entries }, null, 2) + "\n", "utf-8");
+  }
+
+  app.get("/api/tools/list", (_req, res) => {
+    res.json({ ok: true, entries: readToolsRegistry(), path: TOOLS_REGISTRY_PATH });
+  });
+
+  app.post("/api/tools/register", async (req, res) => {
+    const body = (req.body || {}) as Partial<CustomToolEntry>;
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    if (!name) {
+      res.status(400).json({ ok: false, error: "name is required" });
+      return;
+    }
+    const fields = Array.isArray(body.fields) ? body.fields : [];
+    if (fields.length === 0) {
+      res.status(400).json({ ok: false, error: "at least one credential field is required" });
+      return;
+    }
+    const ENV_VAR_RE = /^[A-Z_][A-Z0-9_]*$/;
+    const cleanFields: CustomToolField[] = [];
+    for (const f of fields) {
+      if (!f || typeof f !== "object") {
+        res.status(400).json({ ok: false, error: "field must be an object" });
+        return;
+      }
+      const ff = f as Partial<CustomToolField>;
+      if (typeof ff.envVar !== "string" || !ENV_VAR_RE.test(ff.envVar)) {
+        res.status(400).json({ ok: false, error: `invalid env var: ${String(ff.envVar)}` });
+        return;
+      }
+      const type = ff.type === "text" ? "text" : "password";
+      cleanFields.push({
+        id: typeof ff.id === "string" && ff.id ? ff.id : ff.envVar.toLowerCase(),
+        label: typeof ff.label === "string" && ff.label ? ff.label : ff.envVar,
+        envVar: ff.envVar,
+        type,
+        placeholder: typeof ff.placeholder === "string" ? ff.placeholder : undefined,
+      });
+    }
+
+    const id = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const entry: CustomToolEntry = {
+      id,
+      name,
+      scope: typeof body.scope === "string" ? body.scope : "Custom credential",
+      docsUrl: typeof body.docsUrl === "string" ? body.docsUrl : undefined,
+      fields: cleanFields,
+      mcp: undefined,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Optional: also register the tool as an MCP server in .mcp.json. We
+    // delegate to the same validation + write path used by /api/mcp/add so
+    // a tool with an MCP server is wired up in one shot.
+    let mcpResult: { ok: boolean; committed?: boolean; pushed?: boolean; commit?: string | null; error?: string } | null = null;
+    if (body.mcp && typeof body.mcp === "object") {
+      const m = body.mcp as { name?: unknown; spec?: unknown };
+      const mcpName = typeof m.name === "string" ? m.name.trim() : "";
+      if (!MCP_NAME_RE.test(mcpName)) {
+        res.status(400).json({ ok: false, error: "mcp.name must be alphanumeric/hyphen/underscore (≤64 chars)" });
+        return;
+      }
+      const validation = validateServerSpec(m.spec);
+      if (!validation.ok) {
+        res.status(400).json({ ok: false, error: `mcp.spec invalid: ${validation.error}` });
+        return;
+      }
+      let cfg: { mcpServers: Record<string, unknown> };
+      try { cfg = readMcpConfig(); }
+      catch (err) { res.status(500).json({ ok: false, error: `read .mcp.json: ${String(err)}` }); return; }
+      if (Object.prototype.hasOwnProperty.call(cfg.mcpServers, mcpName)) {
+        res.status(409).json({ ok: false, error: `MCP '${mcpName}' already exists in .mcp.json — pick a different name` });
+        return;
+      }
+      cfg.mcpServers[mcpName] = m.spec as Record<string, unknown>;
+      try { writeMcpConfig(cfg); }
+      catch (err) { res.status(500).json({ ok: false, error: `write .mcp.json: ${String(err)}` }); return; }
+      const git = await gitCommitMcpChange("add", mcpName);
+      mcpResult = {
+        ok: git.committed && git.pushed,
+        committed: git.committed,
+        pushed: git.pushed,
+        commit: git.sha,
+      };
+      entry.mcp = { name: mcpName, spec: m.spec as Record<string, unknown> };
+    }
+
+    const all = readToolsRegistry();
+    all.push(entry);
+    try { writeToolsRegistry(all); }
+    catch (err) {
+      res.status(500).json({ ok: false, error: `failed to persist registry: ${String(err)}` });
+      return;
+    }
+
+    res.json({ ok: true, entry, mcp: mcpResult });
+  });
+
+  app.delete("/api/tools/:id", async (req, res) => {
+    const id = String(req.params.id || "").trim();
+    if (!id) {
+      res.status(400).json({ ok: false, error: "id is required" });
+      return;
+    }
+    const all = readToolsRegistry();
+    const idx = all.findIndex(e => e.id === id);
+    if (idx === -1) {
+      res.status(404).json({ ok: false, error: `tool '${id}' not found in registry` });
+      return;
+    }
+    const removed = all.splice(idx, 1)[0];
+
+    // If this tool registered an MCP server, also remove it from .mcp.json
+    // so the cleanup is symmetric.
+    let mcpResult: { ok: boolean; committed?: boolean; pushed?: boolean; commit?: string | null } | null = null;
+    if (removed.mcp?.name) {
+      try {
+        const cfg = readMcpConfig();
+        if (Object.prototype.hasOwnProperty.call(cfg.mcpServers, removed.mcp.name)) {
+          delete cfg.mcpServers[removed.mcp.name];
+          writeMcpConfig(cfg);
+          const git = await gitCommitMcpChange("remove", removed.mcp.name);
+          mcpResult = {
+            ok: git.committed && git.pushed,
+            committed: git.committed,
+            pushed: git.pushed,
+            commit: git.sha,
+          };
+        }
+      } catch (err) {
+        // Non-fatal: tool registry update succeeds even if MCP cleanup fails.
+        mcpResult = { ok: false };
+        console.error("mcp cleanup on tool delete failed:", err);
+      }
+    }
+
+    try { writeToolsRegistry(all); }
+    catch (err) {
+      res.status(500).json({ ok: false, error: `failed to persist registry: ${String(err)}` });
+      return;
+    }
+
+    res.json({ ok: true, removed: removed.id, mcp: mcpResult });
   });
 
   // Agents API — lists available CLI-based coding agents and whether each is

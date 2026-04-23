@@ -380,11 +380,50 @@ export function Credentials({ onClose }: { onClose: () => void }) {
   // Per-entry save state (idle | saving | saved | error + last message).
   const [saves, setSaves] = useState<Record<string, SaveState>>({});
 
-  // Custom entries added at runtime.
+  // Custom entries — loaded from the bridge's tools registry on mount, then
+  // mutated via /api/tools/register and /api/tools/{id}. Persisted at
+  // <WORKSPACE_ROOT>/.dashboard/custom-tools.json so they survive reload.
   const [customEntries, setCustomEntries] = useState<CredentialEntry[]>([]);
   const [customName, setCustomName] = useState('');
   const [customEnv, setCustomEnv] = useState('');
   const [customScope, setCustomScope] = useState('');
+  const [customMcpName, setCustomMcpName] = useState('');
+  const [customMcpSpec, setCustomMcpSpec] = useState('');
+  const [customError, setCustomError] = useState<string | null>(null);
+  const [customSaving, setCustomSaving] = useState(false);
+
+  // Load persisted custom tools on mount.
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/tools/list')
+      .then(r => r.json())
+      .then(j => {
+        if (cancelled || !j?.ok || !Array.isArray(j.entries)) return;
+        const loaded: CredentialEntry[] = j.entries.map((e: {
+          id: string;
+          name: string;
+          scope?: string;
+          docsUrl?: string;
+          fields: Array<{ id: string; label: string; envVar: string; type: 'password' | 'text'; placeholder?: string }>;
+        }) => ({
+          id: e.id,
+          provider: 'custom',
+          name: e.name,
+          scope: e.scope || 'Custom credential',
+          docsUrl: e.docsUrl,
+          fields: (e.fields || []).map(f => ({
+            id: f.id,
+            label: f.label,
+            envVar: f.envVar,
+            type: f.type === 'text' ? 'text' : 'password',
+            placeholder: f.placeholder,
+          })),
+        }));
+        setCustomEntries(loaded);
+      })
+      .catch(() => { /* bridge unreachable — start with empty list */ });
+    return () => { cancelled = true; };
+  }, []);
 
   const allEntries = useMemo(() => [...DEFAULT_CREDENTIALS, ...customEntries], [customEntries]);
 
@@ -457,16 +496,18 @@ export function Credentials({ onClose }: { onClose: () => void }) {
         pushed?: boolean;
         commitOutput?: string;
         pushOutput?: string;
+        target?: string;
+        mode?: 'dotfiles' | 'repo-local';
         error?: string;
       };
       if (data.ok) {
-        const shortSha = data.commit ? data.commit.slice(0, 7) : '';
+        const savedNames = (data.saved || []).join(', ');
+        const message = data.mode === 'repo-local'
+          ? `Saved ${savedNames} · written to repo .env (gitignored, not committed)`
+          : `Saved ${savedNames} · committed ${data.commit ? data.commit.slice(0, 7) : ''} · pushed to dotfiles`;
         setSaves(prev => ({
           ...prev,
-          [entry.id]: {
-            status: 'saved',
-            message: `Saved ${(data.saved || []).join(', ')} · committed ${shortSha} · pushed to dotfiles`,
-          },
+          [entry.id]: { status: 'saved', message },
         }));
         setSessionSet(prev => {
           const next = { ...prev };
@@ -539,21 +580,104 @@ export function Credentials({ onClose }: { onClose: () => void }) {
     }
   }
 
-  function handleAddCustom() {
+  async function handleAddCustom() {
+    setCustomError(null);
     if (!customName.trim() || !customEnv.trim()) return;
     const envVar = customEnv.trim().toUpperCase().replace(/\s+/g, '_');
-    const id = `custom-${Date.now()}`;
-    setCustomEntries(prev => [...prev, {
-      id,
-      provider: 'custom',
+
+    // Optional MCP server registration: if the user filled in the MCP name +
+    // JSON spec, the same submit creates the .mcp.json entry alongside the
+    // credential slot. One action wires both halves of the tool.
+    let mcp: { name: string; spec: unknown } | undefined;
+    if (customMcpName.trim() || customMcpSpec.trim()) {
+      if (!customMcpName.trim() || !customMcpSpec.trim()) {
+        setCustomError('MCP name and spec must both be provided, or both left blank');
+        return;
+      }
+      let parsedSpec: unknown;
+      try { parsedSpec = JSON.parse(customMcpSpec); }
+      catch (e) {
+        setCustomError(`MCP spec is not valid JSON: ${e instanceof Error ? e.message : String(e)}`);
+        return;
+      }
+      mcp = { name: customMcpName.trim(), spec: parsedSpec };
+    }
+
+    const payload = {
       name: customName.trim(),
-      scope: customScope.trim() || 'Custom credential',
-      fields: [{ id, label: 'Value', envVar, type: 'password' }],
-    }]);
-    setExpanded(prev => ({ ...prev, custom: true }));
-    setCustomName('');
-    setCustomEnv('');
-    setCustomScope('');
+      scope: customScope.trim() || `Custom credential — ${envVar}`,
+      fields: [{
+        id: envVar.toLowerCase(),
+        label: 'Value',
+        envVar,
+        type: 'password' as const,
+      }],
+      mcp,
+    };
+
+    setCustomSaving(true);
+    try {
+      const r = await fetch('/api/tools/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const j = await r.json() as {
+        ok: boolean;
+        entry?: {
+          id: string;
+          name: string;
+          scope: string;
+          docsUrl?: string;
+          fields: Array<{ id: string; label: string; envVar: string; type: 'password' | 'text'; placeholder?: string }>;
+        };
+        error?: string;
+      };
+      if (!j.ok || !j.entry) {
+        setCustomError(j.error || 'failed to register tool');
+        return;
+      }
+      const entry: CredentialEntry = {
+        id: j.entry.id,
+        provider: 'custom',
+        name: j.entry.name,
+        scope: j.entry.scope,
+        docsUrl: j.entry.docsUrl,
+        fields: j.entry.fields.map(f => ({
+          id: f.id,
+          label: f.label,
+          envVar: f.envVar,
+          type: f.type === 'text' ? 'text' : 'password',
+          placeholder: f.placeholder,
+        })),
+      };
+      setCustomEntries(prev => [...prev, entry]);
+      setExpanded(prev => ({ ...prev, custom: true }));
+      setCustomName('');
+      setCustomEnv('');
+      setCustomScope('');
+      setCustomMcpName('');
+      setCustomMcpSpec('');
+    } catch (err) {
+      setCustomError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCustomSaving(false);
+    }
+  }
+
+  async function handleRemoveCustom(entryId: string) {
+    if (!window.confirm('Remove this custom tool? Saved env values stay in .env — only the slot definition is removed.')) return;
+    try {
+      const r = await fetch(`/api/tools/${encodeURIComponent(entryId)}`, { method: 'DELETE' });
+      const j = await r.json() as { ok: boolean; error?: string };
+      if (!j.ok) {
+        setCustomError(j.error || 'failed to remove tool');
+        return;
+      }
+      setCustomEntries(prev => prev.filter(e => e.id !== entryId));
+    } catch (err) {
+      setCustomError(err instanceof Error ? err.message : String(err));
+    }
   }
 
   // Group entries by provider in PROVIDERS order.
@@ -647,6 +771,13 @@ export function Credentials({ onClose }: { onClose: () => void }) {
                             : save.status === 'error' ? '✗ retry save'
                             : 'save'}
                         </button>
+                        {entry.provider === 'custom' && (
+                          <button
+                            onClick={() => handleRemoveCustom(entry.id)}
+                            title="Remove this custom tool slot from the registry"
+                            style={{ background: 'transparent', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)', borderRadius: 3, padding: '1px 7px', fontSize: 11, cursor: 'pointer', fontFamily: 'var(--font-family-mono)' }}
+                          >×</button>
+                        )}
                       </div>
                     </div>
                     {test.status === 'fail' && test.message && (
@@ -732,7 +863,7 @@ export function Credentials({ onClose }: { onClose: () => void }) {
           })}
         </div>
 
-        {/* Add a custom credential */}
+        {/* Add a custom tool — credential slot, optionally with an MCP server. */}
         <div className="credentials__add">
           <input
             className="credentials__input credentials__input--half"
@@ -752,17 +883,34 @@ export function Credentials({ onClose }: { onClose: () => void }) {
             value={customScope}
             onChange={e => setCustomScope(e.target.value)}
           />
+          <input
+            className="credentials__input credentials__input--half"
+            placeholder="MCP server name (optional)"
+            value={customMcpName}
+            onChange={e => setCustomMcpName(e.target.value)}
+          />
+          <input
+            className="credentials__input credentials__input--half"
+            placeholder='MCP spec JSON (optional, e.g. {"command":"npx","args":["-y","@x/mcp"],"env":{"X_KEY":"${X_API_KEY}"}})'
+            value={customMcpSpec}
+            onChange={e => setCustomMcpSpec(e.target.value)}
+          />
           <button
             className="credentials__save-btn"
             onClick={handleAddCustom}
-            disabled={!customName.trim() || !customEnv.trim()}
+            disabled={!customName.trim() || !customEnv.trim() || customSaving}
           >
-            + add
+            {customSaving ? 'adding…' : '+ add'}
           </button>
+          {customError && (
+            <div className="credentials__test-error" style={{ width: '100%' }}>
+              {customError}
+            </div>
+          )}
         </div>
 
         <div className="credentials__footer">
-          Save writes to your dotfiles .env, commits, pushes to origin, and grep-verifies before reporting success. Nothing is sent through chat.
+          Save writes to a Codespace-shared dotfiles .env (commit + push) when one exists, otherwise to <code>.env</code> at the repo root (auto-gitignored, never committed). Either way values become available to the bridge immediately. Adding an MCP name + spec also wires the tool into <code>.mcp.json</code> in one step. Nothing is sent through chat.
         </div>
       </div>
     </div>
