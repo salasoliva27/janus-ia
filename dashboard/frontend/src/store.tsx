@@ -959,6 +959,17 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   }, []);
   const hasActiveSession = useRef(false);
 
+  // Per-session snapshot taken when the bridge drops mid-turn so we can
+  // re-issue the prompt automatically on reconnect. Keyed by sessionId →
+  // { messageId, prompt, agentId, modelId }. messageId lets us skip the
+  // auto-retry if the user has typed a fresh message in the meantime.
+  const pendingRetryRef = useRef<Record<string, {
+    lastMessageId: string;
+    prompt: string;
+    agentId: string;
+    modelId: string | undefined;
+  }>>({});
+
   // ── Actions ──────────────────────────────────────────────
 
   const selectProject = useCallback((id: string | null) => setState(s => ({ ...s, selectedProject: id })), []);
@@ -1141,13 +1152,30 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   // Called by App.tsx when the WebSocket transitions to 'disconnected'.
   // Demotes any active thinking/streaming session to 'disconnected' so the UI
-  // stops lying about "responding" when the bridge has actually died.
+  // stops lying about "responding" when the bridge has actually died, and
+  // snapshots the in-flight user prompt so we can resend it automatically
+  // when the bridge comes back.
   const onConnectionLost = useCallback(() => {
     setState(s => {
       const next: Record<string, SessionChatState> = {};
       let changed = false;
+      const agentId = localStorage.getItem('venture-os-agent') || 'claude';
+      const modelId = localStorage.getItem(`venture-os-model-${agentId}`) || undefined;
       for (const [sid, ss] of Object.entries(s.chatSessions)) {
         if (ss.status === 'thinking' || ss.status === 'streaming') {
+          // Find the last user message — that's the one we owe a reply for.
+          for (let i = ss.messages.length - 1; i >= 0; i--) {
+            const m = ss.messages[i];
+            if (m.role === 'user') {
+              pendingRetryRef.current[sid] = {
+                lastMessageId: m.id,
+                prompt: m.content,
+                agentId,
+                modelId,
+              };
+              break;
+            }
+          }
           next[sid] = { ...ss, thinking: false, status: 'disconnected', lastActivityAt: Date.now() };
           changed = true;
         } else {
@@ -1161,19 +1189,62 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     activeSessionIds.current.clear();
   }, []);
 
-  // Called by App.tsx when the WebSocket reconnects. Clears 'disconnected' state
-  // so the next user message can flow normally.
+  // Called by App.tsx when the WebSocket reconnects. Clears 'disconnected'
+  // state and re-issues any in-flight prompt that was lost when the bridge
+  // died — the bridge persists each session's claudeSessionId to disk, so
+  // re-sending `start` resumes Claude with the prior conversation context.
   const onConnectionRestored = useCallback(() => {
     setState(s => {
       const next: Record<string, SessionChatState> = {};
       let changed = false;
+      const send = wsSendRef.current;
+      const retries: { sid: string; prompt: string; agentId: string; modelId: string | undefined }[] = [];
+      const stillPending: typeof pendingRetryRef.current = {};
       for (const [sid, ss] of Object.entries(s.chatSessions)) {
-        if (ss.status === 'disconnected') {
+        const snap = pendingRetryRef.current[sid];
+        const lastMsg = ss.messages[ss.messages.length - 1];
+        const userMessageUnchanged = !!snap && lastMsg?.id === snap.lastMessageId && lastMsg?.role === 'user';
+        if (ss.status === 'disconnected' && snap && userMessageUnchanged && send) {
+          // Auto-retry — append a system breadcrumb so the user sees we recovered.
+          const sysMsg: ChatMessage = {
+            id: uid(),
+            role: 'system',
+            content: '↻ bridge restarted — resuming the previous turn.',
+            timestamp: Date.now(),
+          };
+          next[sid] = {
+            ...ss,
+            messages: [...ss.messages, sysMsg],
+            thinking: true,
+            status: 'thinking',
+            thinkingStart: Date.now(),
+            lastActivityAt: Date.now(),
+          };
+          retries.push({ sid, prompt: snap.prompt, agentId: snap.agentId, modelId: snap.modelId });
+          changed = true;
+        } else if (ss.status === 'disconnected') {
+          // No retry possible (no snapshot or user has typed a new message) —
+          // just clear the flag so the user can send normally. Drop the snap.
           next[sid] = { ...ss, status: 'idle', lastActivityAt: Date.now() };
           changed = true;
         } else {
+          // Session has already moved past 'disconnected' (e.g. user submitted
+          // a new message during the disconnect window — submit() flipped it to
+          // 'thinking' and the outbox queued the prompt). Drop any stale snap.
           next[sid] = ss;
         }
+      }
+      pendingRetryRef.current = stillPending;
+      // Fire the retries after state update so subsequent claude_message events
+      // see thinking=true. send() queues into the outbox if the WS isn't OPEN.
+      if (retries.length > 0) {
+        queueMicrotask(() => {
+          for (const r of retries) {
+            send!({ type: 'start', prompt: r.prompt, sessionId: r.sid, agentId: r.agentId, modelId: r.modelId });
+            if (r.sid === DEFAULT_SESSION) hasActiveSession.current = true;
+            else activeSessionIds.current.add(r.sid);
+          }
+        });
       }
       if (!changed) return s;
       return { ...s, chatSessions: next, ...deriveLegacy(next) };

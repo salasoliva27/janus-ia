@@ -485,7 +485,7 @@ export function ChatPanel({ sessionId = 'session-0', lineageLabel, lineageColor 
         )}
         {chatStatus === 'disconnected' && (
           <div className="chat-panel__thinking-dots chat-panel__thinking-dots--alert">
-            ⚠ bridge disconnected mid-turn. Will auto-reconnect; the previous response is lost.
+            ⚠ bridge disconnected mid-turn — auto-reconnecting and will resume the prompt.
           </div>
         )}
 
@@ -505,7 +505,7 @@ export function ChatPanel({ sessionId = 'session-0', lineageLabel, lineageColor 
               <> — <ElapsedTimer start={chatThinkingStart} /></>
             )}
             {chatStatus === 'disconnected' && (
-              <> · bridge dropped mid-turn, auto-reconnecting</>
+              <> · bridge dropped, will resume on reconnect</>
             )}
           </span>
           {(chatStatus === 'thinking' || chatStatus === 'streaming') && (
