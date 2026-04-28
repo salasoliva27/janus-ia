@@ -2,45 +2,60 @@
 # ═══════════════════════════════════════════════════════════════
 # JANUS IA — CORRECTION REMINDER (UserPromptSubmit hook)
 #
-# Two-tier enforcement (per audit 2026-04-28):
-#   - STRONG match  →  writes a flag file → PreToolUse hook BLOCKS
-#                      every tool except capture_correction / remember
-#                      until the flag is cleared. This is real, mechanical
-#                      enforcement — the only style that's been shown to
-#                      change behavior in this repo.
-#   - Soft  match   →  emits the previous non-blocking reminder.
+# Three-tier behavior (per audit 2026-04-28 + cross-platform fix
+# from 1624593):
+#   1. STRONG match + janus-memory MCP available + session_id known
+#      →  writes /tmp/janus-correction-pending-<SESSION_ID>; the
+#         PreToolUse correction-flag-guard.sh BLOCKS every tool
+#         except capture_correction / remember until the flag is
+#         cleared by correction-flag-clear.sh. This is real,
+#         mechanical enforcement — the only style with measured
+#         behavioral lift in this repo.
 #
-# The audit found 0/19 redirects in one session were captured despite
-# the previous (reminder-only) hook firing. Reminders don't work; only
-# blocks do (proven by session-stop-gate's median-4 memory count).
+#   2. STRONG match + (no MCP OR no session_id)  →  same wording
+#      but non-blocking. The blocking mechanism depends on the MCP
+#      being callable; when it isn't (Windows / file-based memory),
+#      we fall back to a strong reminder + the file-based capture
+#      instructions origin's 1624593 added.
 #
-# Flag auto-expires after CORRECTION_FLAG_TTL seconds so a false-positive
-# strong match doesn't deadlock the session.
+#   3. SOFT match  →  non-blocking reminder. The model decides.
+#
+# Flag auto-expires after CORRECTION_FLAG_TTL seconds (default 600).
+# Audit data: reminder-only enforcement caught 0/19 redirects in a
+# session; the blocking path is what closed that gap on MCP-equipped
+# machines.
 # ═══════════════════════════════════════════════════════════════
 
 set -uo pipefail
 
-INPUT=$(cat)
+# shellcheck disable=SC1091
+. "$(dirname "$0")/_parse_prompt.sh"
 
-PROMPT=$(echo "$INPUT" | python3 -c "
-import json, sys
-try:
-    d = json.loads(sys.stdin.read())
-    print(d.get('prompt', '') or d.get('user_message', ''))
-except Exception:
-    print('')
-" 2>/dev/null)
+INPUT_RAW=$(cat)
+
+# Re-feed the raw input through parse_prompt (it cats stdin internally).
+# Same trick origin used: capture INPUT_RAW once, pipe it as needed.
+PROMPT=$(printf '%s' "$INPUT_RAW" | parse_prompt)
 
 [ -z "$PROMPT" ] && exit 0
 
-SESSION_ID=$(echo "$INPUT" | python3 -c "
+# Session ID — needed for the per-session flag file. Same cross-platform
+# fallback pattern as parse_prompt: try python3 first, fall back to sed.
+extract_session_id() {
+  if python3 -c "import json" >/dev/null 2>&1; then
+    printf '%s' "$INPUT_RAW" | python3 -c "
 import json, sys
 try:
     d = json.loads(sys.stdin.read())
     print(d.get('session_id', '') or d.get('sessionId', ''))
 except Exception:
     print('')
-" 2>/dev/null)
+" 2>/dev/null
+    return
+  fi
+  printf '%s' "$INPUT_RAW" | sed -n 's/.*"session[_]\?[Ii]d"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1
+}
+SESSION_ID=$(extract_session_id)
 
 LOWER=$(echo "$PROMPT" | tr '[:upper:]' '[:lower:]')
 
@@ -48,7 +63,7 @@ LOWER=$(echo "$PROMPT" | tr '[:upper:]' '[:lower:]')
 PATTERNS='(^|[[:space:],.!?])(no|don'"'"'t|do not|not that|stop|wrong|actually|instead|nope|don'"'"'t do)($|[[:space:],.!?])'
 PATTERNS_ES='(^|[[:space:],.!?])(no|para|detente|mal|incorrecto|en realidad|en vez|mejor no)($|[[:space:],.!?])'
 
-# Strong redirect (very high confidence; BLOCKING)
+# Strong redirect (very high confidence; eligible for BLOCKING when MCP is up)
 STRONG='(that'"'"'s not|that is not|you'"'"'re wrong|you are wrong|don'"'"'t do that|no hagas|no no|redirect|i didn'"'"'t ask|i did not ask|eso no|así no|asi no|mal enfoque|wrong approach|stop doing|deja de|por qué hiciste|why did you do|that was wrong)'
 
 STRONG_HIT=0
@@ -59,11 +74,15 @@ elif echo "$LOWER" | grep -qE "$PATTERNS" || echo "$LOWER" | grep -qE "$PATTERNS
   SOFT_HIT=1
 fi
 
-if [ "$STRONG_HIT" -eq 1 ] && [ -n "$SESSION_ID" ]; then
-  # Write blocking flag. PreToolUse hook reads this and denies tools
-  # other than capture_correction / remember until cleared.
+# Backend detection: MCP path vs file-based fallback.
+HAVE_MCP=0
+if [ -n "${SUPABASE_URL:-}" ] && [ -n "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+  HAVE_MCP=1
+fi
+
+# ─── Tier 1: STRONG + MCP + session_id → BLOCKING ───
+if [ "$STRONG_HIT" -eq 1 ] && [ "$HAVE_MCP" -eq 1 ] && [ -n "$SESSION_ID" ]; then
   FLAG="/tmp/janus-correction-pending-${SESSION_ID}"
-  # Strip newlines from prompt to keep flag single-line; truncate at 500 chars.
   PROMPT_ONELINE=$(echo "$PROMPT" | tr '\n' ' ' | cut -c 1-500)
   printf '%s\t%s\n' "$(date +%s)" "$PROMPT_ONELINE" > "$FLAG"
 
@@ -92,16 +111,63 @@ EOF
   exit 0
 fi
 
-if [ "$SOFT_HIT" -eq 1 ]; then
-  cat <<'EOF'
-▸ CORRECTION-REMINDER (soft signal — not blocking)
+# ─── Tier 2 / 3: non-blocking reminders ───
+# No match? Done.
+if [ "$STRONG_HIT" -eq 0 ] && [ "$SOFT_HIT" -eq 0 ]; then
+  exit 0
+fi
 
-This prompt contains a soft redirect pattern. If it IS a correction:
-  1. Call mcp__memory__capture_correction(original, correction, context, workspace="janus-ia", project=<current>) FIRST
-  2. Then address the actual ask
+# Header line conveys signal strength so the model can weight it.
+if [ "$STRONG_HIT" -eq 1 ]; then
+  HEADER="▸ CORRECTION-REMINDER (STRONG signal — blocking is unavailable on this machine; capture before continuing anyway)"
+else
+  HEADER="▸ CORRECTION-REMINDER (soft signal — not blocking)"
+fi
 
-If it's a false positive (the word triggered the pattern but you're
-not being corrected), proceed normally. The strong-match hook will
-block automatically when the signal is unambiguous.
+if [ "$HAVE_MCP" -eq 1 ]; then
+  cat <<EOF
+$HEADER
+
+This prompt contains a redirect pattern. Per CLAUDE.md evolution rule #4:
+write the correction BEFORE the fix.
+
+  1. Call mcp__memory__capture_correction(original, correction, context, workspace="janus-ia", project=<current>)
+  2. Then address what the user asked
+
+Audit 2026-04-28: reminder-only capture rate was ~0%. The capture is what
+tunes future sessions — skipping it means repeating the same mistake next
+time. False positive? Skip the capture and proceed normally.
+EOF
+else
+  # File-based fallback (Windows / no janus-memory MCP). Origin's 1624593
+  # added the precise instructions; preserved verbatim.
+  SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+  WORKSPACE="${WORKSPACE_ROOT:-$SCRIPT_DIR}"
+  CLAUDE_PROJECT_DIR="$(echo "$WORKSPACE" | sed 's|[/:]|-|g')"
+  MEMORY_DIR="$HOME/.claude/projects/$CLAUDE_PROJECT_DIR/memory"
+  cat <<EOF
+$HEADER
+
+The janus-memory MCP is NOT available on this machine. Use file-based capture:
+  1. Write tool → \`$MEMORY_DIR/correction_<slug>.md\` with frontmatter:
+       ---
+       name: <short name>
+       description: <one-line trigger — so future-you decides relevance>
+       type: correction
+       ---
+       **Original**: what I did / was about to do
+       **Correction**: what Jano said
+       **Why**: why this matters for future sessions
+       **How to apply**: when/where this rule kicks in
+  2. Append a one-line pointer to \`$MEMORY_DIR/MEMORY.md\`:
+       - [<name>](correction_<slug>.md) — <hook>
+  3. THEN address what the user asked
+
+Rule (CLAUDE.md evolution #4): write the correction BEFORE the fix — not
+after. If you code first and memory-capture last, the capture gets skipped
+and you repeat the mistake next session.
+
+False positive? If this prompt is not actually a correction, skip and
+proceed normally. Non-blocking.
 EOF
 fi

@@ -7,6 +7,7 @@ import { PortfolioScoreboard } from './components/PortfolioScoreboard';
 import { CrossProjectFlash } from './components/CrossProjectFlash';
 import { ThemeEngine, useThemeInit } from './components/ThemeEngine';
 import { Credentials } from './components/Credentials';
+import { FirstRunOnboarding } from './components/FirstRunOnboarding';
 import { McpConfig } from './components/McpConfig';
 import { LearningToast } from './components/LearningToast';
 import { DashboardProvider, useBridgeHandler, useRegisterWsSend, useConnectionStateSync } from './store';
@@ -47,6 +48,7 @@ function DashboardInner() {
   const { onConnectionLost, onConnectionRestored } = useConnectionStateSync();
   const [themeOpen, setThemeOpen] = useState(false);
   const [credentialsOpen, setCredentialsOpen] = useState(false);
+  const [credentialsInitialProvider, setCredentialsInitialProvider] = useState<string | undefined>(undefined);
   const [mcpOpen, setMcpOpen] = useState(false);
 
   useThemeInit();
@@ -96,8 +98,9 @@ function DashboardInner() {
       <PortfolioScoreboard />
       <CrossProjectFlash />
       {themeOpen && <ThemeEngine onClose={() => setThemeOpen(false)} />}
-      {credentialsOpen && <Credentials onClose={() => setCredentialsOpen(false)} />}
+      {credentialsOpen && <Credentials onClose={() => { setCredentialsOpen(false); setCredentialsInitialProvider(undefined); }} initialProviderId={credentialsInitialProvider} />}
       {mcpOpen && <McpConfig onClose={() => setMcpOpen(false)} />}
+      <FirstRunOnboarding onOpenCredentials={(tabId) => { setCredentialsInitialProvider(tabId); setCredentialsOpen(true); }} />
       <LearningToast />
       <ReloadBanner />
     </div>

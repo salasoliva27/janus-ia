@@ -17,6 +17,7 @@ import type { FSWatcher } from "chokidar";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { McpSupervisor, defaultSidecars } from "./mcp-supervisor.js";
 
@@ -24,7 +25,7 @@ import { McpSupervisor, defaultSidecars } from "./mcp-supervisor.js";
 // derived from this file's own location so it works regardless of wrapper mode.
 // WORKSPACE_ROOT = the repo the bridge is serving (may differ from DASH_HOME
 // when launched via a wrapper in another repo).
-const DASH_HOME = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..", "..");
+const DASH_HOME = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || DASH_HOME;
 const WORKSPACE_NAME = path.basename(WORKSPACE_ROOT);
 const CLAUDE_PROJECT_DIR = WORKSPACE_ROOT.replace(/\//g, "-");
@@ -105,7 +106,7 @@ export function startServer(port: number): Promise<http.Server> {
   });
 
   // Serve frontend static files in production
-  const frontendDist = path.join(path.dirname(new URL(import.meta.url).pathname), "..", "frontend", "dist");
+  const frontendDist = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "frontend", "dist");
   if (fs.existsSync(frontendDist)) {
     app.use(express.static(frontendDist));
   }
@@ -188,7 +189,7 @@ export function startServer(port: number): Promise<http.Server> {
     }
     try {
       const { spawn } = await import("node:child_process");
-      const cleanEnv = { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0" };
+      const cleanEnv: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0" };
       delete cleanEnv.ANTHROPIC_API_KEY;
       const child = spawn("claude", ["auth", "login", "--claudeai"], {
         env: cleanEnv,
@@ -260,6 +261,129 @@ export function startServer(port: number): Promise<http.Server> {
     }
   });
 
+  // ─── Codex (OpenAI) subscription auth ────────────────
+  // Mirrors the Claude flow: spawn `codex login`, parse the OAuth URL it
+  // prints, return it to the UI. The CLI hosts its own localhost callback.
+  // Tokens persist in ~/.codex/ — survive bridge restart and new shells.
+  let codexLoginChild: import("node:child_process").ChildProcess | null = null;
+  let codexLoginUrl: string | null = null;
+
+  app.get("/api/codex-auth/status", async (_req, res) => {
+    try {
+      const { execFile } = await import("node:child_process");
+      // `codex login status` returns plain text: "Logged in" or "Not logged in".
+      // OPENAI_API_KEY in env doesn't override OAuth the way Claude's does, but
+      // we still report envKeySet so the UI can call out the fallback path.
+      execFile("codex", ["login", "status"], { timeout: 5_000 }, (err, stdout, stderr) => {
+        if (err && !stdout) {
+          res.json({ loggedIn: false, error: String(err.message ?? err), envKeySet: !!process.env.OPENAI_API_KEY });
+          return;
+        }
+        const out = (stdout + stderr).trim();
+        const loggedIn = /logged\s*in/i.test(out) && !/not\s*logged\s*in/i.test(out);
+        // Try to extract auth method (ChatGPT OAuth vs API key) from output.
+        const isChatgpt = /chatgpt|oauth/i.test(out);
+        const isApiKey = /api[-_\s]?key/i.test(out);
+        const authMethod = loggedIn
+          ? (isChatgpt ? "chatgpt" : (isApiKey ? "api-key" : "unknown"))
+          : undefined;
+        const emailMatch = out.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+        const planMatch = out.match(/plan:?\s*([A-Za-z]+)/i);
+        res.json({
+          loggedIn,
+          authMethod,
+          email: emailMatch ? emailMatch[0] : null,
+          subscriptionType: planMatch ? planMatch[1] : null,
+          envKeySet: !!process.env.OPENAI_API_KEY,
+          raw: out.slice(0, 200),
+        });
+      });
+    } catch (err) {
+      res.status(500).json({ loggedIn: false, error: String(err) });
+    }
+  });
+
+  app.post("/api/codex-auth/login", async (_req, res) => {
+    if (codexLoginChild && !codexLoginChild.killed) {
+      res.json({ url: codexLoginUrl, alreadyRunning: true });
+      return;
+    }
+    try {
+      const { spawn } = await import("node:child_process");
+      // `codex login` (no flags) triggers ChatGPT OAuth browser flow and
+      // prints the auth URL on stdout/stderr. Strip OPENAI_API_KEY so the CLI
+      // doesn't short-circuit to API-key mode when one is present in env.
+      const cleanEnv: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0" };
+      delete cleanEnv.OPENAI_API_KEY;
+      const child = spawn("codex", ["login"], {
+        env: cleanEnv,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      codexLoginChild = child;
+      codexLoginUrl = null;
+
+      let buf = "";
+      let resolved = false;
+      const finish = (status: number, body: object) => {
+        if (resolved) return;
+        resolved = true;
+        res.status(status).json(body);
+      };
+
+      const tryExtractUrl = () => {
+        const clean = buf.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
+        // Match any of the OAuth URL shapes codex prints: chatgpt.com for the
+        // browser flow, auth.openai.com for device code, platform.openai.com
+        // as a secondary redirect host.
+        const m = clean.match(/https:\/\/(?:chatgpt\.com|auth\.openai\.com|platform\.openai\.com)\/[^\s\)\]\}>"']+/);
+        if (m) {
+          codexLoginUrl = m[0];
+          finish(200, { url: m[0] });
+        }
+      };
+
+      child.stdout?.on("data", (d) => { buf += d.toString(); tryExtractUrl(); });
+      child.stderr?.on("data", (d) => { buf += d.toString(); tryExtractUrl(); });
+      child.on("exit", () => {
+        codexLoginChild = null;
+        if (!resolved) finish(500, { error: "codex exited before printing a URL", raw: buf.slice(0, 500) });
+      });
+      child.on("error", (e) => {
+        codexLoginChild = null;
+        if (!resolved) finish(500, { error: String(e.message ?? e) });
+      });
+
+      setTimeout(() => {
+        if (!resolved) {
+          try { child.kill(); } catch { /* ignore */ }
+          finish(500, { error: "timed out waiting for OAuth URL", raw: buf.slice(0, 500) });
+        }
+      }, 8_000);
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  app.post("/api/codex-auth/logout", async (_req, res) => {
+    try {
+      if (codexLoginChild && !codexLoginChild.killed) {
+        try { codexLoginChild.kill(); } catch { /* ignore */ }
+        codexLoginChild = null;
+        codexLoginUrl = null;
+      }
+      const { execFile } = await import("node:child_process");
+      execFile("codex", ["logout"], { timeout: 5_000 }, (err, stdout, stderr) => {
+        if (err) {
+          res.status(500).json({ ok: false, error: String(err.message ?? err), stderr: String(stderr).slice(0, 300) });
+          return;
+        }
+        res.json({ ok: true, output: stdout.trim() });
+      });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err) });
+    }
+  });
+
   // Detect active ports
   app.get("/api/ports", async (_req, res) => {
     try {
@@ -307,17 +431,25 @@ export function startServer(port: number): Promise<http.Server> {
     }
   });
 
+  // Path helpers — the file APIs accept/emit forward-slash paths so the browser
+  // can round-trip them safely on any OS. On Windows, `path.join` produces
+  // backslashes; if we didn't normalize, the frontend would send backslash
+  // paths back and the `startsWith(WORKSPACE_ROOT)` guard would reject them.
+  const slash = (p: string) => p.replace(/\\/g, "/");
+  const WORKSPACE_ROOT_SLASH = slash(WORKSPACE_ROOT);
+  const isInsideWorkspace = (p: string) => slash(p).startsWith(WORKSPACE_ROOT_SLASH);
+
   // File API — read files for the editor
   app.get("/api/file", (req, res) => {
     const filePath = req.query.path as string;
-    if (!filePath || !filePath.startsWith(WORKSPACE_ROOT)) {
+    if (!filePath || !isInsideWorkspace(filePath)) {
       res.status(400).json({ error: "Invalid path" });
       return;
     }
     try {
       const content = fs.readFileSync(filePath, "utf-8");
       const stat = fs.statSync(filePath);
-      res.json({ path: filePath, content, size: stat.size, modified: stat.mtimeMs });
+      res.json({ path: slash(filePath), content, size: stat.size, modified: stat.mtimeMs });
     } catch (err) {
       res.status(404).json({ error: `File not found: ${filePath}` });
     }
@@ -326,7 +458,7 @@ export function startServer(port: number): Promise<http.Server> {
   // File API — write files from the editor
   app.post("/api/file", (req, res) => {
     const { path: filePath, content } = req.body;
-    if (!filePath || typeof filePath !== "string" || !filePath.startsWith("/workspaces/")) {
+    if (!filePath || typeof filePath !== "string" || !isInsideWorkspace(filePath)) {
       res.status(400).json({ error: "Invalid path" });
       return;
     }
@@ -337,7 +469,7 @@ export function startServer(port: number): Promise<http.Server> {
     try {
       fs.mkdirSync(path.dirname(filePath), { recursive: true });
       fs.writeFileSync(filePath, content, "utf-8");
-      res.json({ ok: true, path: filePath, size: content.length });
+      res.json({ ok: true, path: slash(filePath), size: content.length });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
@@ -346,7 +478,7 @@ export function startServer(port: number): Promise<http.Server> {
   // File API — list directory
   app.get("/api/files", (req, res) => {
     const dirPath = (req.query.path as string) || path.join(WORKSPACE_ROOT, "dashboard/frontend/src");
-    if (!dirPath.startsWith(WORKSPACE_ROOT)) {
+    if (!isInsideWorkspace(dirPath)) {
       res.status(400).json({ error: "Invalid path" });
       return;
     }
@@ -354,24 +486,23 @@ export function startServer(port: number): Promise<http.Server> {
       const entries = fs.readdirSync(dirPath, { withFileTypes: true });
       const items = entries.map(e => ({
         name: e.name,
-        path: path.join(dirPath, e.name),
+        path: slash(path.join(dirPath, e.name)),
         isDir: e.isDirectory(),
       })).sort((a, b) => {
         if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
         return a.name.localeCompare(b.name);
       });
-      res.json({ path: dirPath, items });
+      res.json({ path: slash(dirPath), items });
     } catch {
       res.status(404).json({ error: "Directory not found" });
     }
   });
 
   // File API — write a single file. Used by the document editor in the UI.
-  // Path-restricted to /workspaces/ to prevent escapes outside the codespace.
   app.post("/api/files/write", (req, res) => {
     const { path: filePath, content } = req.body || {};
-    if (typeof filePath !== "string" || !filePath.startsWith("/workspaces/")) {
-      res.status(400).json({ ok: false, error: "Invalid path — must be under /workspaces/" });
+    if (typeof filePath !== "string" || !isInsideWorkspace(filePath)) {
+      res.status(400).json({ ok: false, error: "Invalid path — must be inside the workspace" });
       return;
     }
     if (typeof content !== "string") {
@@ -382,7 +513,7 @@ export function startServer(port: number): Promise<http.Server> {
       fs.mkdirSync(path.dirname(filePath), { recursive: true });
       fs.writeFileSync(filePath, content, "utf8");
       const stat = fs.statSync(filePath);
-      res.json({ ok: true, path: filePath, size: stat.size, mtime: stat.mtimeMs });
+      res.json({ ok: true, path: slash(filePath), size: stat.size, mtime: stat.mtimeMs });
     } catch (err) {
       res.status(500).json({ ok: false, error: String(err) });
     }
@@ -402,14 +533,14 @@ export function startServer(port: number): Promise<http.Server> {
   // File API — move/rename
   app.post("/api/file/move", (req, res) => {
     const { from, to } = req.body;
-    if (!from || !to || !from.startsWith("/workspaces/") || !to.startsWith("/workspaces/")) {
+    if (!from || !to || !isInsideWorkspace(from) || !isInsideWorkspace(to)) {
       res.status(400).json({ error: "Invalid paths" });
       return;
     }
     try {
       fs.mkdirSync(path.dirname(to), { recursive: true });
       fs.renameSync(from, to);
-      res.json({ ok: true, from, to });
+      res.json({ ok: true, from: slash(from), to: slash(to) });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
@@ -1913,7 +2044,7 @@ function buildGraphFromFs(): { nodes: GraphNode[]; edges: { source: string; targ
 }
 
 function ensureHookConfig(port: number): void {
-  const configDir = path.join(path.dirname(new URL(import.meta.url).pathname), "..", ".claude");
+  const configDir = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".claude");
   const configPath = path.join(configDir, "settings.json");
   const hookUrl = `http://localhost:${port}/hooks/post-tool-use`;
 

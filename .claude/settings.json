@@ -8,7 +8,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /workspaces/janus-ia/scripts/preflight.sh",
+            "command": "bash $CLAUDE_PROJECT_DIR/scripts/preflight.sh",
             "timeout": 15,
             "statusMessage": "Running session pre-flight..."
           }
@@ -20,7 +20,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /workspaces/janus-ia/scripts/session-stop-gate.sh",
+            "command": "bash $CLAUDE_PROJECT_DIR/scripts/session-stop-gate.sh",
             "timeout": 10
           }
         ]
@@ -31,12 +31,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /workspaces/janus-ia/scripts/dispatch-reminder.sh",
+            "command": "bash $CLAUDE_PROJECT_DIR/scripts/dispatch-reminder.sh",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bash /workspaces/janus-ia/scripts/correction-reminder.sh",
+            "command": "bash $CLAUDE_PROJECT_DIR/scripts/correction-reminder.sh",
             "timeout": 5
           }
         ]
@@ -47,7 +47,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /workspaces/janus-ia/scripts/correction-flag-guard.sh",
+            "command": "bash $CLAUDE_PROJECT_DIR/scripts/correction-flag-guard.sh",
             "timeout": 3
           }
         ]
@@ -58,7 +58,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /workspaces/janus-ia/scripts/correction-flag-clear.sh",
+            "command": "bash $CLAUDE_PROJECT_DIR/scripts/correction-flag-clear.sh",
             "timeout": 3
           }
         ]
