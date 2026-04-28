@@ -16,16 +16,8 @@ set "LAUNCHER=%DESKTOP%\Janus IA.cmd"
 
 > "%LAUNCHER%" echo @echo off
 >> "%LAUNCHER%" echo setlocal
->> "%LAUNCHER%" echo set "JANUS_OPEN_BROWSER=1"
 >> "%LAUNCHER%" echo set "ROOT=%ROOT%"
->> "%LAUNCHER%" echo set "BASH=%%ProgramFiles%%\Git\bin\bash.exe"
->> "%LAUNCHER%" echo if not exist "%%BASH%%" set "BASH=%%ProgramFiles(x86)%%\Git\bin\bash.exe"
->> "%LAUNCHER%" echo if not exist "%%BASH%%" set "BASH=bash"
->> "%LAUNCHER%" echo pushd "%%ROOT%%"
->> "%LAUNCHER%" echo "%%BASH%%" dash --open
->> "%LAUNCHER%" echo set "ERR=%%ERRORLEVEL%%"
->> "%LAUNCHER%" echo popd
->> "%LAUNCHER%" echo if not "%%ERR%%"=="0" pause
+>> "%LAUNCHER%" echo call "%%ROOT%%\Janus IA.cmd"
 
 echo Installed: "%LAUNCHER%"
 echo.

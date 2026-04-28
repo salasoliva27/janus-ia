@@ -9,7 +9,8 @@ credentials keep flowing through the same dotfiles-backed runtime.
 From the computer where you want the Desktop icon, clone or download this repo
 and run the installer for that operating system:
 
-- Windows: double-click `install-desktop.cmd`
+- Windows: double-click `Janus IA.cmd` to launch from the repo, or
+  `install-desktop.cmd` to create a Desktop shortcut
 - macOS: double-click `install-desktop.command`
 - Linux: run `./scripts/install-launcher.sh`
 
@@ -21,6 +22,10 @@ That creates one of these, depending on the machine:
 
 Double-clicking it starts the bridge, builds the frontend when needed, loads
 credentials from `~/.env`, and opens `http://localhost:3100`.
+
+On every launch, Janus checks Git for a safe fast-forward update before it
+starts. If the repo has local tracked edits, it skips the update and continues
+with the current checkout.
 
 The installer must run on the target machine. Running it in Codespaces only
 creates a launcher inside Codespaces, not on your laptop.

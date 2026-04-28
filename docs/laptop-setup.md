@@ -31,6 +31,13 @@ git clone https://github.com/salasoliva27/janus-ia.git
 cp ~/code/dotfiles/.env ~/.env
 
 cd ~/code/janus-ia
+cmd.exe //c "Janus IA.cmd"
+```
+
+That launches Janus directly from the repo. To also create a Desktop shortcut,
+run:
+
+```bash
 cmd.exe //c install-desktop.cmd
 ```
 

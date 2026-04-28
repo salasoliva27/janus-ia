@@ -33,8 +33,10 @@ projects, outputs).
    ```
    To install a desktop shortcut that starts the same dashboard and opens the
    browser on your own computer, clone/download the repo there and run
-   `install-desktop.cmd` on Windows, `install-desktop.command` on macOS, or
-   `./scripts/install-launcher.sh` on Linux.
+   `Janus IA.cmd` on Windows to launch directly from the repo,
+   `install-desktop.cmd` on Windows to create a Desktop shortcut,
+   `install-desktop.command` on macOS, or `./scripts/install-launcher.sh` on
+   Linux.
    First-time laptop setup with dotfiles is documented in
    [`docs/laptop-setup.md`](docs/laptop-setup.md).
 5. **First turn, tell the AI**: `run discovery`. It will walk you through naming

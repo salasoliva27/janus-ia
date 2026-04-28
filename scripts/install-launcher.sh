@@ -26,22 +26,19 @@ desktop_dir() {
 }
 
 install_windows() {
-  local desktop root_u root_q target
+  local desktop root_w target
   desktop="$(desktop_dir)"
-  root_u="$ROOT"
+  root_w="$ROOT"
   if command -v cygpath >/dev/null 2>&1; then
-    root_u="$(cygpath -u "$ROOT")"
+    root_w="$(cygpath -w "$ROOT")"
   fi
-  root_q="$(quote_sh "$root_u")"
   target="$desktop/$APP_NAME.cmd"
 
   cat > "$target" <<EOF
 @echo off
 setlocal
-set "JANUS_OPEN_BROWSER=1"
-set "BASH=%ProgramFiles%\Git\bin\bash.exe"
-if not exist "%BASH%" set "BASH=bash"
-"%BASH%" -lc "cd $root_q && JANUS_OPEN_BROWSER=1 ./dash --open"
+set "ROOT=$root_w"
+call "%ROOT%\Janus IA.cmd"
 EOF
 
   echo "Installed: $target"
