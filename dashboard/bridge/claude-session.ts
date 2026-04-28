@@ -7,61 +7,113 @@ import type { ServerMessage } from "./types.js";
 import { getAgent } from "./agent-registry.js";
 
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || "/workspaces/janus-ia";
-const CLAUDE_PROJECT_DIR = WORKSPACE_ROOT.replace(/\//g, "-");
-const SESSIONS_DIR = path.join(
-  os.homedir(),
-  ".claude",
-  "projects",
-  CLAUDE_PROJECT_DIR,
-  "dashboard-sessions",
-);
+const ENGINE_PROJECT_DIR = WORKSPACE_ROOT.replace(/\//g, "-");
+const JANUS_STATE_DIR = path.join(os.homedir(), ".janus", "projects", ENGINE_PROJECT_DIR);
+const LEGACY_CLAUDE_STATE_DIR = path.join(os.homedir(), ".claude", "projects", ENGINE_PROJECT_DIR);
+const SESSIONS_DIR = path.join(JANUS_STATE_DIR, "dashboard-sessions");
+const LEGACY_SESSIONS_DIR = path.join(LEGACY_CLAUDE_STATE_DIR, "dashboard-sessions");
+
+type PersistedSession = {
+  sessionId?: string;
+  agentId?: string;
+  activeAgentId?: string;
+  activeModelId?: string;
+  claudeSessionId?: string | null;
+  engineSessionIds?: Record<string, string | null>;
+  engineTurnCounts?: Record<string, number>;
+  conversationLog?: string[];
+  lastPrompt?: string;
+  updatedAt?: number;
+};
 
 function isValidCwd(cwd: string): boolean {
   return cwd.startsWith(WORKSPACE_ROOT);
 }
 
-function sessionFile(sessionId: string, agentId: string = "claude"): string {
+function sessionFile(sessionId: string): string {
   const safe = sessionId.replace(/[^a-zA-Z0-9_-]/g, "_");
-  // Keep claude's file at the legacy name for backward compatibility; other
-  // agents get their own suffixed file so switching doesn't clobber state.
+  return path.join(SESSIONS_DIR, `${safe}.json`);
+}
+
+function legacySessionFile(sessionId: string, agentId: string = "claude"): string {
+  const safe = sessionId.replace(/[^a-zA-Z0-9_-]/g, "_");
   const suffix = agentId === "claude" ? "" : `-${agentId}`;
-  return path.join(SESSIONS_DIR, `${safe}${suffix}.json`);
+  return path.join(LEGACY_SESSIONS_DIR, `${safe}${suffix}.json`);
+}
+
+function readJsonFile(file: string): PersistedSession | null {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf-8")) as PersistedSession;
+  } catch {
+    return null;
+  }
+}
+
+function readPersistedSession(sessionId: string, agentId: string): PersistedSession | null {
+  const primary = readJsonFile(sessionFile(sessionId));
+  if (primary) return primary;
+  return readJsonFile(legacySessionFile(sessionId, agentId)) || readJsonFile(legacySessionFile(sessionId, "claude"));
 }
 
 function loadPersistedSession(sessionId: string, agentId: string = "claude"): {
-  claudeSessionId: string | null;
+  engineSessionId: string | null;
+  engineTurnCounts: Record<string, number>;
   conversationLog: string[];
 } {
-  try {
-    const raw = fs.readFileSync(sessionFile(sessionId, agentId), "utf-8");
-    const parsed = JSON.parse(raw);
-    return {
-      claudeSessionId: typeof parsed.claudeSessionId === "string" ? parsed.claudeSessionId : null,
-      conversationLog: Array.isArray(parsed.conversationLog) ? parsed.conversationLog.slice(-50) : [],
-    };
-  } catch {
-    return { claudeSessionId: null, conversationLog: [] };
+  const parsed = readPersistedSession(sessionId, agentId);
+  if (!parsed) return { engineSessionId: null, engineTurnCounts: {}, conversationLog: [] };
+
+  const engineSessionIds = parsed.engineSessionIds || {};
+  if (parsed.claudeSessionId && !engineSessionIds.claude) {
+    engineSessionIds.claude = parsed.claudeSessionId;
   }
+  return {
+    engineSessionId: typeof engineSessionIds[agentId] === "string" ? engineSessionIds[agentId]! : null,
+    engineTurnCounts: parsed.engineTurnCounts && typeof parsed.engineTurnCounts === "object" ? parsed.engineTurnCounts : {},
+    conversationLog: Array.isArray(parsed.conversationLog) ? parsed.conversationLog.slice(-80) : [],
+  };
 }
 
 function persistSession(
   sessionId: string,
-  claudeSessionId: string | null,
+  engineSessionId: string | null,
   conversationLog: string[],
   lastPrompt: string,
   agentId: string = "claude",
+  modelId?: string,
+  options: { markEngineCaughtUp?: boolean } = {},
 ): void {
   try {
     fs.mkdirSync(SESSIONS_DIR, { recursive: true });
+    const existing = readJsonFile(sessionFile(sessionId)) || {};
+    const engineSessionIds: Record<string, string | null> = {
+      ...(existing.engineSessionIds || {}),
+    };
+    if (existing.claudeSessionId && !engineSessionIds.claude) {
+      engineSessionIds.claude = existing.claudeSessionId;
+    }
+    if (engineSessionId) {
+      engineSessionIds[agentId] = engineSessionId;
+    }
+    const engineTurnCounts: Record<string, number> = {
+      ...(existing.engineTurnCounts || {}),
+    };
+    if (options.markEngineCaughtUp) {
+      engineTurnCounts[agentId] = conversationLog.length;
+    }
     const payload = {
       sessionId,
-      agentId,
-      claudeSessionId,
+      activeAgentId: agentId,
+      activeModelId: modelId,
+      engineSessionIds,
+      engineTurnCounts,
+      // Backward-compatible field for old UI/session probes.
+      claudeSessionId: engineSessionIds.claude || null,
       conversationLog: conversationLog.slice(-50),
       lastPrompt: lastPrompt.slice(0, 500),
       updatedAt: Date.now(),
     };
-    fs.writeFileSync(sessionFile(sessionId, agentId), JSON.stringify(payload, null, 2));
+    fs.writeFileSync(sessionFile(sessionId), JSON.stringify(payload, null, 2));
   } catch (err) {
     console.warn(`[session:${sessionId}] failed to persist:`, err);
   }
@@ -69,7 +121,8 @@ function persistSession(
 
 export class ClaudeSession {
   private process: ChildProcess | null = null;
-  private claudeSessionId: string | null = null;
+  private engineSessionId: string | null = null;
+  private engineTurnCounts: Record<string, number> = {};
   private timeout: ReturnType<typeof setTimeout> | null = null;
   private conversationLog: string[] = [];
   private forkContext: string[] | null = null;
@@ -91,10 +144,11 @@ export class ClaudeSession {
     this.agentId = agentId;
     this.modelId = getAgent(agentId).defaultModel;
     const persisted = loadPersistedSession(sessionId, agentId);
-    this.claudeSessionId = persisted.claudeSessionId;
+    this.engineSessionId = persisted.engineSessionId;
+    this.engineTurnCounts = persisted.engineTurnCounts;
     this.conversationLog = persisted.conversationLog;
-    if (this.claudeSessionId) {
-      console.log(`[session:${sessionId}/${agentId}] resumed id: ${this.claudeSessionId}`);
+    if (this.engineSessionId) {
+      console.log(`[session:${sessionId}/${agentId}] resumed engine id: ${this.engineSessionId}`);
     }
   }
 
@@ -107,11 +161,16 @@ export class ClaudeSession {
   setAgent(agentId: string): void {
     if (agentId === this.agentId) return;
     this.close();
+    const currentLog = this.conversationLog;
     this.agentId = agentId;
     this.modelId = getAgent(agentId).defaultModel;
     const persisted = loadPersistedSession(this.sessionId, agentId);
-    this.claudeSessionId = persisted.claudeSessionId;
-    this.conversationLog = persisted.conversationLog;
+    this.engineSessionId = persisted.engineSessionId;
+    this.engineTurnCounts = persisted.engineTurnCounts;
+    this.conversationLog = currentLog.length >= persisted.conversationLog.length
+      ? currentLog
+      : persisted.conversationLog;
+    persistSession(this.sessionId, this.engineSessionId, this.conversationLog, this.lastPrompt, this.agentId, this.modelId);
     console.log(`[session:${this.sessionId}] switched to agent "${agentId}" (model: ${this.modelId})`);
   }
 
@@ -131,9 +190,9 @@ export class ClaudeSession {
 
   getModel(): string { return this.modelId; }
 
-  /** Whether a persisted Claude session exists (can --continue on next turn) */
+  /** Whether this engine has a persisted native session id */
   hasPersistedSession(): boolean {
-    return this.claudeSessionId !== null;
+    return this.engineSessionId !== null;
   }
 
   /** Set conversation history from parent session (for forks) */
@@ -144,6 +203,38 @@ export class ClaudeSession {
   /** Get the accumulated conversation log for forking */
   getConversationLog(): string[] {
     return [...this.conversationLog];
+  }
+
+  private buildEngineHandoff(prompt: string): string {
+    if (this.conversationLog.length === 0) return prompt;
+
+    const knownCount = this.engineSessionId
+      ? (this.engineTurnCounts[this.agentId] ?? 0)
+      : 0;
+    if (this.engineSessionId && knownCount >= this.conversationLog.length) return prompt;
+
+    const handoffEntries = (this.engineSessionId
+      ? this.conversationLog.slice(Math.max(0, knownCount))
+      : this.conversationLog
+    ).slice(-24);
+    if (handoffEntries.length === 0) return prompt;
+
+    let handoff = handoffEntries.join("\n\n");
+    const maxChars = 18_000;
+    if (handoff.length > maxChars) {
+      handoff = handoff.slice(handoff.length - maxChars);
+      handoff = `[truncated]\n${handoff}`;
+    }
+
+    return [
+      "[Janus shared session context]",
+      "You are an interchangeable engine inside the same Janus brain. Claude, Codex, and other CLIs are processors, not separate assistants.",
+      "The following bridge-level conversation happened before this turn and may include work from a different engine. Preserve continuity and use the same repository, memory, MCP, tool, and vault context.",
+      handoff,
+      "[End Janus shared session context]",
+      "",
+      prompt,
+    ].join("\n");
   }
 
   async start(prompt: string, cwd: string): Promise<void> {
@@ -157,11 +248,12 @@ export class ClaudeSession {
       fullPrompt = `[Previous conversation context — you are continuing from a forked branch]\n${contextBlock}\n[End of context. Continue from here.]\n\n${prompt}`;
       this.forkContext = null; // Only use once
     }
+    fullPrompt = this.buildEngineHandoff(fullPrompt);
 
     const adapter = getAgent(this.agentId);
     const spawnSpec = adapter.buildSpawn({
       prompt: fullPrompt,
-      continueId: this.claudeSessionId,
+      continueId: this.engineSessionId,
       modelId: this.modelId,
     });
 
@@ -171,8 +263,9 @@ export class ClaudeSession {
     for (const key of spawnSpec.envUnset || []) { delete childEnv[key]; }
     if (spawnSpec.envPatch) { Object.assign(childEnv, spawnSpec.envPatch); }
 
-    // Pre-flight: missing-credential guard for adapters that need an API key.
-    if (adapter.envVarRequired && !childEnv[adapter.envVarRequired]) {
+    // Pre-flight: missing-credential guard for adapters that strictly need an
+    // env key. Codex can also use `codex login`, so env absence is not fatal.
+    if (adapter.envVarRequired && adapter.id !== "codex" && !childEnv[adapter.envVarRequired]) {
       this.send({ type: "error", message: `${adapter.label} requires ${adapter.envVarRequired} — open the Key Vault to add it.`, sessionId: this.sessionId });
       return;
     }
@@ -184,10 +277,10 @@ export class ClaudeSession {
     });
 
     // Log user message
-    this.conversationLog.push(`User: ${prompt}`);
+    this.conversationLog.push(`User (${this.agentId}/${this.modelId}): ${prompt}`);
     this.lastPrompt = prompt;
     // Persist immediately so a crash mid-turn doesn't lose the user's message
-    persistSession(this.sessionId, this.claudeSessionId, this.conversationLog, prompt, this.agentId);
+    persistSession(this.sessionId, this.engineSessionId, this.conversationLog, prompt, this.agentId, this.modelId);
 
     const proc = spawn(spawnSpec.cli, spawnSpec.args, {
       cwd: safeCwd,
@@ -319,11 +412,14 @@ export class ClaudeSession {
 
       // Log assistant response
       if (assistantBuffer) {
-        this.conversationLog.push(`Assistant: ${assistantBuffer}`);
+        this.conversationLog.push(`Assistant (${this.agentId}/${this.modelId}): ${assistantBuffer}`);
       }
 
       // Persist after the turn completes
-      persistSession(this.sessionId, this.claudeSessionId, this.conversationLog, this.lastPrompt, this.agentId);
+      this.engineTurnCounts[this.agentId] = this.conversationLog.length;
+      persistSession(this.sessionId, this.engineSessionId, this.conversationLog, this.lastPrompt, this.agentId, this.modelId, {
+        markEngineCaughtUp: true,
+      });
 
       this.send({
         type: "session_end",
@@ -364,9 +460,9 @@ export class ClaudeSession {
         // (`hook_started` / `hook_progress` / `hook_response`) carry their own
         // hook UUID, which would corrupt --resume on the next turn.
         if (event.subtype === "init" && event.session_id) {
-          this.claudeSessionId = event.session_id;
-          console.log(`[session:${this.sessionId}/${this.agentId}] cli id:`, this.claudeSessionId);
-          persistSession(this.sessionId, this.claudeSessionId, this.conversationLog, this.lastPrompt, this.agentId);
+          this.engineSessionId = event.session_id;
+          console.log(`[session:${this.sessionId}/${this.agentId}] engine id:`, this.engineSessionId);
+          persistSession(this.sessionId, this.engineSessionId, this.conversationLog, this.lastPrompt, this.agentId, this.modelId);
         }
         return null;
       }
@@ -398,7 +494,7 @@ export class ClaudeSession {
 
       case "result": {
         if (event.session_id) {
-          this.claudeSessionId = event.session_id;
+          this.engineSessionId = event.session_id;
         }
         return null;
       }
@@ -428,9 +524,9 @@ export class ClaudeSession {
     switch (event.type) {
       case "thread.started": {
         if (event.thread_id) {
-          this.claudeSessionId = event.thread_id;
-          console.log(`[session:${this.sessionId}/${this.agentId}] codex thread:`, this.claudeSessionId);
-          persistSession(this.sessionId, this.claudeSessionId, this.conversationLog, this.lastPrompt, this.agentId);
+          this.engineSessionId = event.thread_id;
+          console.log(`[session:${this.sessionId}/${this.agentId}] codex thread:`, this.engineSessionId);
+          persistSession(this.sessionId, this.engineSessionId, this.conversationLog, this.lastPrompt, this.agentId, this.modelId);
         }
         return null;
       }
@@ -456,6 +552,24 @@ export class ClaudeSession {
             timestamp: Date.now(),
           });
         }
+        if (typeof item.type === "string" && (item.type.includes("mcp") || item.type.includes("tool"))) {
+          const server = item.server_name || item.server || item.mcp_server_name;
+          const name = item.tool_name || item.name || item.tool || item.type;
+          const toolName = server && name ? `mcp__${server}__${name}` : String(name || item.type);
+          this.send({
+            type: "tool_event",
+            toolName,
+            input: item.arguments || item.args || item.input || item.params || {},
+            sessionId: this.sessionId,
+            timestamp: Date.now(),
+          });
+        }
+        return null;
+      }
+      case "turn.failed":
+      case "error": {
+        const message = event.message || event.error || event.reason || "Codex turn failed";
+        this.send({ type: "error", message: typeof message === "string" ? message : JSON.stringify(message), sessionId: this.sessionId });
         return null;
       }
       case "turn.completed":

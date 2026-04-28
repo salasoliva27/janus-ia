@@ -32,6 +32,11 @@ export WORKSPACE_ROOT
 DASH_HOME="${JANUS_DASH_HOME:-$SCRIPT_DIR}"
 DASH="$DASH_HOME/dashboard"
 PORT="${VENTURE_OS_PORT:-3100}"
+OPEN_BROWSER="${JANUS_OPEN_BROWSER:-0}"
+if [ "${1:-}" = "--open" ]; then
+  OPEN_BROWSER=1
+  shift
+fi
 
 cd "$DASH"
 
@@ -115,6 +120,7 @@ kill_port() {
       echo "• killed stale process on :$port"
     fi
   fi
+  return 0
 }
 kill_port "$PORT"
 sleep 0.3
@@ -127,6 +133,10 @@ fi
 if [ ! -d "frontend/node_modules" ]; then
   echo "• installing frontend deps..."
   (cd frontend && npm install --silent)
+fi
+if [ -f "$WORKSPACE_ROOT/mcp-servers/memory/package.json" ] && [ ! -d "$WORKSPACE_ROOT/mcp-servers/memory/node_modules" ]; then
+  echo "• installing memory MCP deps..."
+  (cd "$WORKSPACE_ROOT/mcp-servers/memory" && npm install --silent)
 fi
 
 # Provider CLIs (claude / codex / gemini) — install any that aren't on PATH.
@@ -192,4 +202,37 @@ fi
 echo "• workspace: $WORKSPACE_ROOT"
 echo "• starting dashboard on http://localhost:$PORT"
 echo ""
+
+if [ "$OPEN_BROWSER" = "1" ]; then
+  (
+    for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+      if command -v curl >/dev/null 2>&1; then
+        curl -fsS "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && break
+      elif command -v wget >/dev/null 2>&1; then
+        wget -qO- "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && break
+      else
+        sleep 3
+        break
+      fi
+      sleep 0.5
+    done
+    url="http://localhost:$PORT"
+    case "$(uname -s)" in
+      Darwin)
+        open "$url" >/dev/null 2>&1 || true
+        ;;
+      MINGW*|MSYS*|CYGWIN*)
+        cmd.exe /c start "" "$url" >/dev/null 2>&1 || true
+        ;;
+      *)
+        if command -v xdg-open >/dev/null 2>&1; then
+          xdg-open "$url" >/dev/null 2>&1 || true
+        elif command -v sensible-browser >/dev/null 2>&1; then
+          sensible-browser "$url" >/dev/null 2>&1 || true
+        fi
+        ;;
+    esac
+  ) &
+fi
+
 exec npx tsx bin/venture-os.ts

@@ -3,7 +3,7 @@
 #
 # Strips Jano-specific content (his project wikis, outputs, specific learnings)
 # while keeping the core agent framework intact: agents/, concepts/, scripts/,
-# dashboard/, mcp-servers/, registries, CLAUDE.md.
+# dashboard/, mcp-servers/, registries, AGENTS.md, and CLAUDE.md loader.
 #
 # Run ONCE after cloning/forking. It's idempotent — safe to re-run, but it
 # will warn before deleting directories that already look stripped.
@@ -25,8 +25,8 @@ for arg in "$@"; do
   esac
 done
 
-if [ ! -f "$REPO/CLAUDE.md" ] || [ ! -d "$REPO/agents" ]; then
-  echo "× $REPO doesn't look like a janus-ia fork (missing CLAUDE.md or agents/)" >&2
+if [ ! -f "$REPO/AGENTS.md" ] || [ ! -f "$REPO/CLAUDE.md" ] || [ ! -d "$REPO/agents" ]; then
+  echo "× $REPO doesn't look like a janus-ia fork (missing AGENTS.md, CLAUDE.md loader, or agents/)" >&2
   exit 1
 fi
 
@@ -45,7 +45,7 @@ cat <<EOF
 │    - learnings/* (all his accumulated findings)           │
 │                                                           │
 │  Keeping the framework:                                   │
-│    ✓ CLAUDE.md, agents/                                   │
+│    ✓ AGENTS.md, CLAUDE.md loader, agents/                 │
 │    ✓ scripts/, dashboard/, mcp-servers/                   │
 │    ✓ tools/registry.md, skills/registry.md                │
 │                                                           │
@@ -180,7 +180,7 @@ file-based memory, MCP integrations, and a workspace-aware dashboard.
 
 In the first chat turn, tell the AI: **\`run discovery\`**. It will walk you
 through declaring your projects, your stack, and personalizing the agents in
-\`agents/\` and \`CLAUDE.md\` for your work.
+\`agents/\`, \`AGENTS.md\`, and provider adapter files for your work.
 
 ## Layout
 
@@ -193,11 +193,12 @@ mcp-servers/    local MCP servers (memory, etc.)
 scripts/        bootstrap, preflight, gdrive, dash-link, init-fork
 tools/          tool registry + configs
 skills/         skills registry
-CLAUDE.md       master brain — read this first
+AGENTS.md       canonical brain and agent registry
+CLAUDE.md       Claude Code compatibility loader
 \`\`\`
 
-\`CLAUDE.md\` is the source of truth for how the system behaves. Personalize
-it during discovery before doing real work.
+\`AGENTS.md\` is the provider-neutral source of truth. Personalize it during
+discovery before doing real work.
 TEMPLATE
 
 # ─── Drop stale planning artifacts and project-specific agents ──

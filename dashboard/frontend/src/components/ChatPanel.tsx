@@ -409,7 +409,7 @@ export function ChatPanel({ sessionId = 'session-0', lineageLabel, lineageColor 
             <span className="chat-panel__memory-bar-icon">🧠</span>
             <span className="chat-panel__memory-bar-label">
               {memoryCount === 0
-                ? 'No memories yet — Claude will write as it learns'
+                ? 'No memories yet — the active engine will write as it learns'
                 : `${memoryCount} ${memoryCount === 1 ? 'memory' : 'memories'} active`}
             </span>
             {memoryTypes.length > 0 && (

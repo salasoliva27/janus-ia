@@ -12,9 +12,9 @@ The tool and skill ecosystems grow by thousands per month. No static list stays 
 
 ## THE DIFFERENCE: MCP TOOLS vs SKILLS
 
-**MCP Tools** give Claude access to external systems at runtime — GitHub, Gmail, databases, APIs. Claude uses them to *act on the world*.
+**MCP Tools** give the active engine access to external systems at runtime — GitHub, Gmail, databases, APIs. The engine uses them to *act on the world*.
 
-**Skills (SKILL.md)** teach Claude *how to do something* before a task starts — domain expertise, workflows, design systems, security patterns. Like a recipe Claude reads before cooking.
+**Skills (SKILL.md)** teach the active engine *how to do something* before a task starts — domain expertise, workflows, design systems, security patterns. Like a recipe the engine reads before cooking.
 
 They compose: Sentry's code review skill defines the PR analysis workflow; the Sentry MCP fetches the live error data. MCP is the kitchen. The skill is the recipe.
 
@@ -30,11 +30,13 @@ Read `tools/registry.md`:
 - **BAD** → explain why, search for alternatives
 - **UNTESTED** → proceed to Step 2
 
-### Step 2 — Use Claude Code's built-in MCP Tool Search
+### Step 2 — Use an MCP registry search
 ```bash
 claude mcp search "[capability]"
 ```
-This searches the MCP registry with lazy loading — up to 95% context savings.
+Claude Code's built-in search is one adapter path. If Codex or another engine
+has the active context, use any equivalent registry search and still add the
+result to `.mcp.json`.
 
 ### Step 3 — Search public repositories
 ```
@@ -81,7 +83,7 @@ find_helpful_skills("[describe the task]")
 
 ### Step 3 — Search public repositories
 ```
-"[capability] SKILL.md Claude Code GitHub 2026"
+"[capability] SKILL.md coding agent GitHub 2026"
 ```
 Key directories:
 - github.com/travisvn/awesome-claude-skills

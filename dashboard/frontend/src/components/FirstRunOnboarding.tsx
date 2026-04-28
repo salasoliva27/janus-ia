@@ -141,7 +141,7 @@ export function FirstRunOnboarding({ onOpenCredentials }: { onOpenCredentials: (
   return (
     <div className="onboarding__backdrop" role="dialog" aria-modal="true">
       <div className="onboarding__modal">
-        <h2 className="onboarding__title">Welcome — pick how you want to talk to an agent</h2>
+        <h2 className="onboarding__title">Welcome — pick an engine for the brain</h2>
         <p className="onboarding__subtitle">
           No provider is configured yet. Sign in with a subscription or paste an API key for any of the
           options below. You can add more providers later from the credentials panel.

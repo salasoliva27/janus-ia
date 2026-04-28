@@ -1,8 +1,9 @@
 # janus-ia
 
-A Claude Code-based agent system for running a venture portfolio: validates ideas,
-builds products, coordinates legal/financial/calendar, and compounds learnings
-across every build.
+An engine-neutral AI operating system for running a venture portfolio: validates
+ideas, builds products, coordinates legal/financial/calendar, and compounds
+learnings across every build. Claude Code and Codex are processors behind the
+same Janus brain.
 
 This is Jano's working brain. The repo is public so you can fork it as a starting
 point for your own setup.
@@ -11,12 +12,14 @@ point for your own setup.
 
 ## Using this as a template
 
-The repo ships with the agent framework intact (CLAUDE.md, agents, concepts,
-scripts, dashboard, MCP servers, tools/skills registries) and strips out the
-personal content (Jano's wikis, projects, outputs).
+The repo ships with the brain framework intact (`AGENTS.md`, Claude/Codex
+adapter entry points, agents, concepts, scripts, dashboard, MCP servers,
+tools/skills registries) and strips out the personal content (Jano's wikis,
+projects, outputs).
 
 1. **Fork** this repo on GitHub.
-2. **Open it in a Codespace** (or clone locally with Claude Code installed).
+2. **Open it in a Codespace** (or clone locally with at least one supported
+   engine CLI installed).
 3. **Strip personal content**:
    ```bash
    ./scripts/init-fork.sh
@@ -28,6 +31,12 @@ personal content (Jano's wikis, projects, outputs).
    ```bash
    ./dash
    ```
+   To install a desktop shortcut that starts the same dashboard and opens the
+   browser on your own computer, clone/download the repo there and run
+   `install-desktop.cmd` on Windows, `install-desktop.command` on macOS, or
+   `./scripts/install-launcher.sh` on Linux.
+   First-time laptop setup with dotfiles is documented in
+   [`docs/laptop-setup.md`](docs/laptop-setup.md).
 5. **First turn, tell the AI**: `run discovery`. It will walk you through naming
    your projects, declaring your stack, and personalizing the agents.
 
@@ -57,6 +66,9 @@ It uses janus-ia's dashboard code but reads/writes its own workspace files
 (`learnings/`, `concepts/`, `wiki/`, memory namespace, etc.). Memory is scoped
 per workspace, so jp-ai's memory stays in jp-ai's namespace.
 
+Desktop and Samsung home-screen launcher notes live in
+[`docs/launchers.md`](docs/launchers.md).
+
 ---
 
 ## Layout
@@ -70,8 +82,9 @@ mcp-servers/    Local MCP servers (memory, etc.)
 scripts/        Bootstrap, preflight, gdrive, dash-link, init-fork
 tools/          Tool registry + configs
 skills/         Skills registry
-CLAUDE.md       The master brain — read this first
+AGENTS.md       Canonical brain, agent registry, and tool contract
+CLAUDE.md       Claude Code compatibility loader
 ```
 
-`CLAUDE.md` is the source of truth for how the system behaves. Read it before
-making structural changes.
+`AGENTS.md` is the provider-neutral source of truth. `CLAUDE.md` exists only so
+Claude Code can boot into the same brain.

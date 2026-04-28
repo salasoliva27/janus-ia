@@ -2,6 +2,7 @@
   "name": "Janus IA",
   "short_name": "Janus",
   "description": "Personal AI orchestrator dashboard",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -11,6 +12,23 @@
   "theme_color": "#0a0a0a",
   "lang": "en",
   "categories": ["productivity", "developer"],
+  "prefer_related_applications": false,
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "Open Janus IA",
+      "url": "/",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png",
+          "purpose": "any"
+        }
+      ]
+    }
+  ],
   "icons": [
     {
       "src": "/icons/icon.svg",

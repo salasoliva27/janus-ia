@@ -30,7 +30,7 @@ export class SessionManager {
   /** Add a WebSocket to the broadcast set; flush any pending messages to it. */
   attachWs(ws: WebSocket): void {
     this.clients.add(ws);
-    // Keep ClaudeSession's legacy ws ref pointing at a live one for paths
+    // Keep the engine session's legacy ws ref pointing at a live one for paths
     // that still read it directly (e.g. read-only status sends).
     for (const entry of this.sessions.values()) entry.session.setWs(ws);
     // Flush queued messages so this tab sees what it missed while disconnected.
@@ -104,7 +104,7 @@ export class SessionManager {
 
     const pm = new PermissionManager();
     const firstLive = [...this.clients].find(c => c.readyState === 1) ?? null;
-    const session = new ClaudeSession(firstLive, pm, newId, "claude", this);
+    const session = new ClaudeSession(firstLive, pm, newId, parent.session.getAgent(), this);
 
     // Inject parent conversation history as context
     const history = parent.session.getConversationLog();

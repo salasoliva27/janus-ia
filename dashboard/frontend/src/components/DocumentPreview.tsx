@@ -169,7 +169,7 @@ export function DocumentPreview({ docs: docsProp, emptyMessage }: DocumentPrevie
   const draft = activeDoc ? (drafts[activeDoc.id] ?? activeDoc.content) : '';
   const dirty = activeDoc ? draft !== activeDoc.content : false;
 
-  // Drop drafts when the upstream content changes (e.g., Claude rewrites the file).
+  // Drop drafts when the upstream content changes (e.g., an engine rewrites the file).
   useEffect(() => {
     if (!activeDoc) return;
     setDrafts(d => {
@@ -204,7 +204,7 @@ export function DocumentPreview({ docs: docsProp, emptyMessage }: DocumentPrevie
     return (
       <div className="doc-preview">
         <div className="doc-preview__empty">
-          {emptyMessage ?? 'documents will appear here as Claude creates files'}
+          {emptyMessage ?? 'documents will appear here as the active engine creates files'}
         </div>
       </div>
     );

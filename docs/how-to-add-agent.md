@@ -10,5 +10,5 @@ When to add a domain agent:
 Steps:
 1. Create agents/domain/[field].md
 2. Define: role, tools it uses, skills it uses, output format, clinical flags if any
-3. Register in CLAUDE.md AGENTS table
-4. Any product that needs it: add "Read agents/domain/[field].md" to its CLAUDE.md
+3. Register in the shared agent table in `AGENTS.md`
+4. Any product that needs it: add "Read agents/domain/[field].md" to its brain entry point

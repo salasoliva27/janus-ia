@@ -47,7 +47,7 @@ export function RightPanel() {
       {/* Content */}
       <div style={{ flex: 1, minHeight: 0 }}>
         {rightPanelTab === 'memory' ? <MemoryRiver /> :
-         rightPanelTab === 'documents' ? <DocumentPreview docs={documents} emptyMessage="documents will appear here as Claude creates files" /> :
+         rightPanelTab === 'documents' ? <DocumentPreview docs={documents} emptyMessage="documents will appear here as the active engine creates files" /> :
          rightPanelTab === 'uploaded' ? <DocumentPreview docs={uploadedDocuments} emptyMessage="attach a file in chat and it will show up here" /> :
          <FileEditor />}
       </div>

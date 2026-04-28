@@ -128,7 +128,7 @@ if [ "$HAVE_MCP" -eq 1 ]; then
   cat <<EOF
 $HEADER
 
-This prompt contains a redirect pattern. Per CLAUDE.md evolution rule #4:
+This prompt contains a redirect pattern. Per AGENTS.md evolution rule:
 write the correction BEFORE the fix.
 
   1. Call mcp__memory__capture_correction(original, correction, context, workspace="janus-ia", project=<current>)
@@ -163,7 +163,7 @@ The janus-memory MCP is NOT available on this machine. Use file-based capture:
        - [<name>](correction_<slug>.md) — <hook>
   3. THEN address what the user asked
 
-Rule (CLAUDE.md evolution #4): write the correction BEFORE the fix — not
+Rule (AGENTS.md evolution): write the correction BEFORE the fix — not
 after. If you code first and memory-capture last, the capture gets skipped
 and you repeat the mistake next session.
 

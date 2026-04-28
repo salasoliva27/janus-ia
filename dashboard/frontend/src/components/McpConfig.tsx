@@ -253,7 +253,7 @@ export function McpConfig({ onClose }: { onClose: () => void }) {
         <div className="credentials__footer">
           Source of truth: <code style={{ fontFamily: 'var(--font-family-mono)' }}>{configPath || '.mcp.json'}</code>.
           Add/remove writes <code>.mcp.json</code>, commits, and pushes to origin.
-          Changes take effect on the next agent turn — every chat spawns a fresh CLI that re-reads the file.
+          Changes take effect on the next engine turn — every chat spawns a fresh CLI that re-reads the file.
         </div>
       </div>
     </div>

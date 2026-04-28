@@ -5,7 +5,7 @@ import type { ClientMessage, ServerMessage } from "./types.js";
 import { isValidClientMessage } from "./types.js";
 import { SessionManager } from "./session-manager.js";
 import { PermissionManager } from "./permissions.js";
-import { listAgentAvailability } from "./agent-registry.js";
+import { getAgent, listAgentAvailability } from "./agent-registry.js";
 import { startWatchers, stopWatchers, broadcastInitialLearnings } from "./file-watcher.js";
 import {
   broadcastInitialProjectStates,
@@ -21,6 +21,7 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { McpSupervisor, defaultSidecars } from "./mcp-supervisor.js";
 import { mountAuth } from "./auth.js";
+import { syncCodexMcpConfig } from "./codex-config.js";
 
 // DASH_HOME = where the dashboard code lives (janus-ia/dashboard/..). Always
 // derived from this file's own location so it works regardless of wrapper mode.
@@ -29,10 +30,27 @@ import { mountAuth } from "./auth.js";
 const DASH_HOME = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || DASH_HOME;
 const WORKSPACE_NAME = path.basename(WORKSPACE_ROOT);
-const CLAUDE_PROJECT_DIR = WORKSPACE_ROOT.replace(/\//g, "-");
+const ENGINE_PROJECT_DIR = WORKSPACE_ROOT.replace(/\//g, "-");
 const UPLOADS_DIR = path.join(WORKSPACE_ROOT, "dump", "uploads");
-const THEMES_DIR = path.join(os.homedir(), ".claude", "projects", CLAUDE_PROJECT_DIR, "themes");
-const MEMORY_DIR = path.join(os.homedir(), ".claude", "projects", CLAUDE_PROJECT_DIR, "memory");
+const JANUS_STATE_DIR = path.join(os.homedir(), ".janus", "projects", ENGINE_PROJECT_DIR);
+const LEGACY_CLAUDE_STATE_DIR = path.join(os.homedir(), ".claude", "projects", ENGINE_PROJECT_DIR);
+const THEMES_DIR = path.join(JANUS_STATE_DIR, "themes");
+const LEGACY_THEMES_DIR = path.join(LEGACY_CLAUDE_STATE_DIR, "themes");
+const MEMORY_DIR = path.join(JANUS_STATE_DIR, "memory");
+const LEGACY_MEMORY_DIR = path.join(LEGACY_CLAUDE_STATE_DIR, "memory");
+const MEMORY_DIRS = Array.from(new Set([MEMORY_DIR, LEGACY_MEMORY_DIR]));
+
+function existingMemoryDirs(): string[] {
+  return MEMORY_DIRS.filter(dir => fs.existsSync(dir));
+}
+
+function findMemoryFile(name: string): string | null {
+  for (const dir of existingMemoryDirs()) {
+    const full = path.join(dir, name);
+    if (fs.existsSync(full)) return full;
+  }
+  return null;
+}
 
 // Persistent Snowflake connection — auth once at first query, reuse forever.
 // MFA token caching means even a fresh process skips the Duo push for ~4h.
@@ -85,12 +103,21 @@ export function startServer(port: number): Promise<http.Server> {
   // PDF becomes ~14MB base64. 30MB gives comfortable headroom.
   app.use(express.json({ limit: "30mb" }));
 
-  // Bridge owns MCP sidecar lifecycle so UI-driven Claude Code sessions don't
-  // lose MCPs across conversations. Each sidecar runs HTTP transport; .mcp.json
-  // references them by URL instead of stdio-spawning them inside Claude Code.
+  // Bridge owns MCP sidecar lifecycle so UI-driven engine sessions don't lose
+  // MCPs across conversations. Each sidecar runs HTTP transport; .mcp.json
+  // references them by URL instead of binding lifecycle to one provider CLI.
   const mcpSupervisor = new McpSupervisor();
   for (const def of defaultSidecars(DASH_HOME)) {
     mcpSupervisor.spawn(def);
+  }
+  try {
+    const sync = syncCodexMcpConfig(WORKSPACE_ROOT, DASH_HOME);
+    console.log(
+      `[codex-mcp] ${sync.written ? "updated" : "checked"} ${sync.path} (${sync.servers.length} server${sync.servers.length === 1 ? "" : "s"})`,
+    );
+    if (sync.skipped.length > 0) console.warn("[codex-mcp] skipped:", sync.skipped.join("; "));
+  } catch (err) {
+    console.warn("[codex-mcp] sync failed:", err);
   }
   const shutdownMcp = () => {
     mcpSupervisor.shutdown().catch(err => console.error("mcp shutdown error:", err));
@@ -108,7 +135,7 @@ export function startServer(port: number): Promise<http.Server> {
   });
 
   app.get("/api/workspace", (_req, res) => {
-    res.json({ root: WORKSPACE_ROOT, name: WORKSPACE_NAME, memoryDir: MEMORY_DIR });
+    res.json({ root: WORKSPACE_ROOT, name: WORKSPACE_NAME, memoryDir: MEMORY_DIR, memoryDirs: MEMORY_DIRS });
   });
 
   // Serve frontend static files in production
@@ -409,7 +436,7 @@ export function startServer(port: number): Promise<http.Server> {
   // Calendar API — proxy Google Calendar events
   app.get("/api/calendar/events", async (_req, res) => {
     try {
-      // Try Google Calendar MCP via Claude session (executes tool call)
+      // Try Google Calendar through an engine/tool session when available.
       // For now, return from environment if available, or use MCP direct
       const now = new Date();
       const timeMin = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
@@ -1359,14 +1386,19 @@ export function startServer(port: number): Promise<http.Server> {
   // Memory API — exposes auto-memory index so chat can show "what's loaded"
   app.get("/api/memory/index", (_req, res) => {
     try {
-      const memDir = MEMORY_DIR;
-      if (!fs.existsSync(memDir)) {
-        res.json({ entries: [], indexContent: "", dir: memDir });
+      const memDirs = existingMemoryDirs();
+      if (memDirs.length === 0) {
+        res.json({ entries: [], indexContent: "", dir: MEMORY_DIR, dirs: MEMORY_DIRS });
         return;
       }
 
-      const indexPath = path.join(memDir, "MEMORY.md");
-      const indexContent = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, "utf-8") : "";
+      const indexContents = memDirs
+        .map(dir => {
+          const indexPath = path.join(dir, "MEMORY.md");
+          return fs.existsSync(indexPath) ? fs.readFileSync(indexPath, "utf-8") : "";
+        })
+        .filter(Boolean);
+      const indexContent = indexContents.join("\n\n");
 
       const entries: Array<{
         file: string;
@@ -1377,38 +1409,42 @@ export function startServer(port: number): Promise<http.Server> {
         preview: string;
       }> = [];
 
-      for (const f of fs.readdirSync(memDir)) {
-        if (f === "MEMORY.md" || !f.endsWith(".md")) continue;
-        try {
-          const full = path.join(memDir, f);
-          const stat = fs.statSync(full);
-          const raw = fs.readFileSync(full, "utf-8");
+      const seen = new Set<string>();
+      for (const memDir of memDirs) {
+        for (const f of fs.readdirSync(memDir)) {
+          if (f === "MEMORY.md" || !f.endsWith(".md") || seen.has(f)) continue;
+          seen.add(f);
+          try {
+            const full = path.join(memDir, f);
+            const stat = fs.statSync(full);
+            const raw = fs.readFileSync(full, "utf-8");
 
-          // Parse frontmatter between --- blocks
-          const fmMatch = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
-          const fm = fmMatch?.[1] || "";
-          const body = fmMatch?.[2] || raw;
+            // Parse frontmatter between --- blocks
+            const fmMatch = raw.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+            const fm = fmMatch?.[1] || "";
+            const body = fmMatch?.[2] || raw;
 
-          const nameMatch = fm.match(/^name:\s*(.+)$/m);
-          const descMatch = fm.match(/^description:\s*(.+)$/m);
-          const typeMatch = fm.match(/^type:\s*(\w+)/m);
+            const nameMatch = fm.match(/^name:\s*(.+)$/m);
+            const descMatch = fm.match(/^description:\s*(.+)$/m);
+            const typeMatch = fm.match(/^type:\s*(\w+)/m);
 
-          const preview = body.trim().slice(0, 240);
-          entries.push({
-            file: f,
-            name: nameMatch?.[1]?.trim() || f.replace(/\.md$/, ""),
-            description: descMatch?.[1]?.trim() || "",
-            type: typeMatch?.[1]?.trim() || "memory",
-            updatedAt: stat.mtimeMs,
-            preview,
-          });
-        } catch { /* skip unreadable files */ }
+            const preview = body.trim().slice(0, 240);
+            entries.push({
+              file: f,
+              name: nameMatch?.[1]?.trim() || f.replace(/\.md$/, ""),
+              description: descMatch?.[1]?.trim() || "",
+              type: typeMatch?.[1]?.trim() || "memory",
+              updatedAt: stat.mtimeMs,
+              preview,
+            });
+          } catch { /* skip unreadable files */ }
+        }
       }
 
       // Most recent first
       entries.sort((a, b) => b.updatedAt - a.updatedAt);
 
-      res.json({ entries, indexContent, dir: memDir });
+      res.json({ entries, indexContent, dir: memDirs[0], dirs: memDirs });
     } catch (err) {
       res.status(500).json({ error: String(err), entries: [] });
     }
@@ -1423,9 +1459,8 @@ export function startServer(port: number): Promise<http.Server> {
         res.status(400).json({ error: "Invalid memory file name" });
         return;
       }
-      const memDir = MEMORY_DIR;
-      const full = path.join(memDir, name);
-      if (!fs.existsSync(full)) {
+      const full = findMemoryFile(name);
+      if (!full || !fs.existsSync(full)) {
         res.status(404).json({ error: "Not found" });
         return;
       }
@@ -1440,22 +1475,21 @@ export function startServer(port: number): Promise<http.Server> {
   app.get("/api/session/:id", (req, res) => {
     try {
       const id = req.params.id.replace(/[^a-zA-Z0-9_-]/g, "_");
-      const file = path.join(
-        os.homedir(),
-        ".claude",
-        "projects",
-        CLAUDE_PROJECT_DIR,
-        "dashboard-sessions",
-        `${id}.json`,
-      );
-      if (!fs.existsSync(file)) {
+      const file = path.join(JANUS_STATE_DIR, "dashboard-sessions", `${id}.json`);
+      const legacyFile = path.join(LEGACY_CLAUDE_STATE_DIR, "dashboard-sessions", `${id}.json`);
+      const source = fs.existsSync(file) ? file : legacyFile;
+      if (!fs.existsSync(source)) {
         res.json({ persisted: false });
         return;
       }
-      const data = JSON.parse(fs.readFileSync(file, "utf-8"));
+      const data = JSON.parse(fs.readFileSync(source, "utf-8"));
+      const activeAgentId = data.activeAgentId || data.agentId || "claude";
+      const engineSessionIds = data.engineSessionIds || (data.claudeSessionId ? { claude: data.claudeSessionId } : {});
       res.json({
         persisted: true,
-        claudeSessionId: data.claudeSessionId || null,
+        activeAgentId,
+        engineSessionId: engineSessionIds[activeAgentId] || null,
+        claudeSessionId: data.claudeSessionId || engineSessionIds.claude || null,
         updatedAt: data.updatedAt || 0,
         turnCount: Array.isArray(data.conversationLog) ? data.conversationLog.length : 0,
       });
@@ -1464,7 +1498,7 @@ export function startServer(port: number): Promise<http.Server> {
     }
   });
 
-  // Chat file upload — stores files under dump/uploads/ so Claude's Read tool can consume them
+  // Chat file upload — stores files under dump/uploads/ so the active engine can consume them
   app.post("/api/chat/upload", (req, res) => {
     try {
       const { name, type, data } = (req.body || {}) as { name?: string; type?: string; data?: string };
@@ -1589,11 +1623,16 @@ Do not include anything except the JSON object.`;
   // List custom themes — frontend merges these into the theme picker
   app.get("/api/theme/custom", (_req, res) => {
     try {
-      if (!fs.existsSync(THEMES_DIR)) { res.json({ themes: [] }); return; }
+      const themeDirs = [THEMES_DIR, LEGACY_THEMES_DIR].filter(dir => fs.existsSync(dir));
+      if (themeDirs.length === 0) { res.json({ themes: [] }); return; }
       const themes: unknown[] = [];
-      for (const f of fs.readdirSync(THEMES_DIR)) {
-        if (!f.endsWith(".json")) continue;
-        try { themes.push(JSON.parse(fs.readFileSync(path.join(THEMES_DIR, f), "utf-8"))); } catch {}
+      const seenThemes = new Set<string>();
+      for (const themeDir of themeDirs) {
+        for (const f of fs.readdirSync(themeDir)) {
+          if (!f.endsWith(".json") || seenThemes.has(f)) continue;
+          seenThemes.add(f);
+          try { themes.push(JSON.parse(fs.readFileSync(path.join(themeDir, f), "utf-8"))); } catch {}
+        }
       }
       res.json({ themes });
     } catch (err) {
@@ -1629,7 +1668,7 @@ Do not include anything except the JSON object.`;
   auth.bindWs(server, wss);
 
   // One SessionManager per bridge process, not per WS connection. This lets
-  // Claude child processes survive browser blips / tab reloads / Codespaces
+  // Engine child processes survive browser blips / tab reloads / Codespaces
   // forwarded-port recycling: the WS detaches cleanly, the CLI keeps running,
   // and the new connection re-attaches without losing the turn.
   const sessionManager = new SessionManager();
@@ -1748,10 +1787,11 @@ Do not include anything except the JSON object.`;
             msg.parentSessionId, msg.newSessionId, msg.forkLabel, msg.forkMessageIndex
           );
           if (forked) {
+            const forkedAdapter = getAgent(forked.getAgent());
             // Send session_start for the new session
             ws.send(JSON.stringify({
               type: "session_start",
-              auth: "subscription",
+              auth: forkedAdapter.authMethod === "oauth" ? "subscription" : "api_key",
               sessionId: msg.newSessionId,
             } satisfies ServerMessage));
           }
@@ -1959,10 +1999,12 @@ function buildGraphFromFs(): { nodes: GraphNode[]; edges: { source: string; targ
   }
 
   // Scan memory files (persistent learnings)
-  const memoryDir = MEMORY_DIR;
-  if (fs.existsSync(memoryDir)) {
+  const memoryDirs = existingMemoryDirs();
+  const scannedMemory = new Set<string>();
+  for (const memoryDir of memoryDirs) {
     for (const f of fs.readdirSync(memoryDir)) {
-      if (f === "MEMORY.md" || !f.endsWith(".md")) continue;
+      if (f === "MEMORY.md" || !f.endsWith(".md") || scannedMemory.has(f)) continue;
+      scannedMemory.add(f);
       const name = f.replace(".md", "");
       try {
         const content = fs.readFileSync(path.join(memoryDir, f), "utf-8");
@@ -2014,7 +2056,7 @@ function buildGraphFromFs(): { nodes: GraphNode[]; edges: { source: string; targ
       path.join(root, "agents", "domain", `${n.label}.md`),
       path.join(root, "learnings", `${n.label}.md`),
       path.join(root, "concepts", `${n.label}.md`),
-      path.join(memoryDir, labelFile),
+      ...memoryDirs.map(memoryDir => path.join(memoryDir, labelFile)),
     ];
     for (const p of possiblePaths) {
       if (fs.existsSync(p)) {

@@ -289,7 +289,7 @@ export function SQLConsole({ tool }: SQLConsoleProps) {
               title="Send query + error to chat"
               disabled={handedOff}
             >
-              {handedOff ? '✓ sent to chat' : '→ ask Claude to fix'}
+              {handedOff ? '✓ sent to chat' : '→ ask engine to fix'}
             </button>
           </div>
         )}

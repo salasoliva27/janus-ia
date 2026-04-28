@@ -4,7 +4,7 @@
 # Fires on Claude Code "Stop" event. Refuses to end the session
 # until a `most-recent-context` memory for today exists in Supabase.
 #
-# Why: CLAUDE.md mandates a session-handoff anchor. For 30 days it
+# Why: AGENTS.md mandates a session-handoff anchor. For 30 days it
 # was never written. This hook makes it mechanical, not advisory.
 #
 # Contract:
@@ -99,7 +99,7 @@ except:
     cat <<EOF
 {
   "decision": "block",
-  "reason": "STOP-GATE: Only ${MEMORY_COUNT} memories written today for workspace=${WORKSPACE_NAME}. CLAUDE.md mandates min 3 per session and correction fbcef958 (2026-04-16) requires INLINE learning, not batched. Before ending this session you MUST call \`mcp__memory__remember\` at least $((3 - MEMORY_COUNT)) more time(s) capturing: a learning (surprising discovery, non-obvious bug fix, or tool verdict), a decision (architecture/business/tooling), or a pattern (repeats across 2+ projects). Write them NOW, then return control. If the session genuinely had nothing worth capturing, write a memory saying exactly that with type='session' — but that's rare."
+  "reason": "STOP-GATE: Only ${MEMORY_COUNT} memories written today for workspace=${WORKSPACE_NAME}. AGENTS.md mandates memory capture and correction fbcef958 (2026-04-16) requires INLINE learning, not batched. Before ending this session you MUST call \`mcp__memory__remember\` at least $((3 - MEMORY_COUNT)) more time(s) capturing: a learning (surprising discovery, non-obvious bug fix, or tool verdict), a decision (architecture/business/tooling), or a pattern (repeats across 2+ projects). Write them NOW, then return control. If the session genuinely had nothing worth capturing, write a memory saying exactly that with type='session' — but that's rare."
 }
 EOF
     exit 0

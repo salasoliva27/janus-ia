@@ -1,6 +1,7 @@
 .env
 *.credentials.json
 node_modules/
+dashboard/dist/
 .DS_Store
 .playwright-mcp/
 outputs/screenshots/
@@ -17,7 +18,7 @@ dump/uploads/
 # Runtime logs
 *.log
 # Generated binaries — these go to Drive (Janus_AI/), never git.
-# See CLAUDE.md STORAGE ROUTING.
+# See AGENTS.md storage/tool routing.
 outputs/**/*.pdf
 outputs/**/*.docx
 outputs/**/*.xlsx

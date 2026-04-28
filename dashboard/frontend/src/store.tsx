@@ -24,7 +24,7 @@ const TOOLS: ToolStatus[] = [
   { id: 'gmail', name: 'Gmail', shortName: 'GM', callCount: 0, lastCall: 0, active: false, configured: 'needs-auth', authUrl: 'Gmail OAuth' },
   { id: 'calendar', name: 'Google Calendar', shortName: 'GC', callCount: 0, lastCall: 0, active: false, configured: 'needs-auth', authUrl: 'Google Calendar OAuth' },
   { id: 'context7', name: 'Context7', shortName: 'C7', callCount: 0, lastCall: 0, active: false, configured: 'ready' },
-  { id: 'claude-sdk', name: 'Claude SDK', shortName: 'CL', callCount: 0, lastCall: 0, active: false, configured: 'ready', envVar: 'ANTHROPIC_API_KEY' },
+  { id: 'claude-sdk', name: 'AI SDK', shortName: 'AI', callCount: 0, lastCall: 0, active: false, configured: 'ready', envVar: 'ANTHROPIC_API_KEY' },
   { id: 'filesystem', name: 'Filesystem', shortName: 'FS', callCount: 0, lastCall: 0, active: false, configured: 'ready' },
   { id: 'sequential', name: 'Sequential Thinking', shortName: 'ST', callCount: 0, lastCall: 0, active: false, configured: 'ready' },
   { id: 'memory', name: 'Memory MCP', shortName: 'MM', callCount: 0, lastCall: 0, active: false, configured: 'ready' },
@@ -32,12 +32,12 @@ const TOOLS: ToolStatus[] = [
 
 // Map tool_event toolName strings to our tool IDs
 const TOOL_NAME_MAP: Record<string, string> = {
-  'mcp__github': 'github', 'mcp__supabase': 'supabase', 'mcp__playwright': 'playwright',
+  'mcp__github': 'github', 'mcp__supabase': 'supabase', 'mcp__snowflake': 'snowflake', 'mcp__playwright': 'playwright',
   'mcp__brave-search': 'brave', 'mcp__obsidian-vault': 'obsidian', 'mcp__claude_ai_Gmail': 'gmail',
   'mcp__claude_ai_Google_Calendar': 'calendar', 'mcp__filesystem': 'filesystem',
-  'mcp__sequential-thinking': 'sequential', 'mcp__janus-memory': 'memory',
+  'mcp__sequential-thinking': 'sequential', 'mcp__janus-memory': 'memory', 'mcp__memory': 'memory',
   'Read': 'filesystem', 'Write': 'filesystem', 'Edit': 'filesystem', 'Glob': 'filesystem',
-  'Grep': 'filesystem', 'Bash': 'filesystem', 'Agent': 'claude-sdk',
+  'Grep': 'filesystem', 'Bash': 'filesystem', 'bash': 'filesystem', 'command_execution': 'filesystem', 'Agent': 'claude-sdk',
 };
 
 function resolveToolId(toolName: string): string | null {
@@ -48,6 +48,14 @@ function resolveToolId(toolName: string): string | null {
     if (toolName.startsWith(prefix)) return id;
   }
   return null;
+}
+
+function isMemoryTool(toolName: string): boolean {
+  return toolName.startsWith('mcp__janus-memory__') || toolName.startsWith('mcp__memory__');
+}
+
+function toolAction(toolName: string): string | undefined {
+  return toolName.split('__').pop();
 }
 
 const EXT_LANG: Record<string, string> = {
@@ -277,7 +285,7 @@ function deriveLegacy(sessions: Record<string, SessionChatState>) {
 }
 
 // Persist key session state across reloads.
-// v2: full chatSessions map, no TTL (backend persists the claude session id,
+// v2: full chatSessions map, no TTL (backend persists native engine session ids,
 // so the frontend transcript must live as long as the backend session does).
 const SESSION_STORAGE_KEY = 'venture-os-session-v2';
 const LEGACY_STORAGE_KEY = 'venture-os-session';
@@ -463,7 +471,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     fetch(`/api/session/${sid}`)
       .then(r => r.json())
       .then(data => {
-        if (!data.persisted || !data.claudeSessionId) return;
+        if (!data.persisted || (!data.engineSessionId && !data.claudeSessionId)) return;
         setState(s => {
           // Only inject if session has no prior user/assistant messages this load
           const current = s.chatSessions[sid] || emptySessionChat();
@@ -472,10 +480,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           const resumeMsg: ChatMessage = {
             id: uid(),
             role: 'memory',
-            content: `Resumed previous session (${data.turnCount} prior turns) — Claude will remember the prior conversation.`,
+            content: `Resumed previous session (${data.turnCount} prior turns) — the active engine will remember the prior conversation.`,
             timestamp: Date.now(),
             memoryAction: 'resume',
-            memoryRef: data.claudeSessionId,
+            memoryRef: data.engineSessionId || data.claudeSessionId,
           };
           const chatSessions = updateSession(s.chatSessions, sid, ss => ({
             ...ss, messages: [...ss.messages, resumeMsg],
@@ -597,8 +605,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           const input = msg.input as Record<string, unknown> | undefined;
           let memories = s.memories;
           const memoryPulses: ChatMessage[] = [];
-          if (input && msg.toolName.startsWith('mcp__janus-memory__')) {
-            const action = msg.toolName.split('__').pop();
+          if (input && isMemoryTool(msg.toolName)) {
+            const action = toolAction(msg.toolName);
             if (action === 'remember') {
               const content = (input.content as string) || (input.name as string) || '';
               const project = (input.project as string) || undefined;
@@ -628,7 +636,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           // Pulse when auto-memory files are read/written directly via Read/Write
           if (input && (msg.toolName === 'Read' || msg.toolName === 'Write' || msg.toolName === 'Edit')) {
             const p = (input.file_path || input.path || '') as string;
-            if (typeof p === 'string' && p.includes('/.claude/projects/') && p.includes('/memory/') && p.endsWith('.md')) {
+            if (typeof p === 'string' && (p.includes('/.janus/projects/') || p.includes('/.claude/projects/')) && p.includes('/memory/') && p.endsWith('.md')) {
               const file = p.split('/').pop() || p;
               memoryPulses.push({
                 id: uid(), role: 'memory',
@@ -658,8 +666,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
           // ── Derive learnings from memory writes ────────────
           let learnings = s.learnings;
-          if (input && msg.toolName.startsWith('mcp__janus-memory__')) {
-            const action = msg.toolName.split('__').pop();
+          if (input && isMemoryTool(msg.toolName)) {
+            const action = toolAction(msg.toolName);
             if (action === 'remember') {
               const content = (input.content as string) || '';
               const name = (input.name as string) || '';
@@ -1075,7 +1083,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       hasActiveSession.current = false;
     }
 
-    // Detect credential input (e.g. BRAVE_API_KEY=sk-...) — these are for external MCPs, not Claude
+    // Detect credential input (e.g. BRAVE_API_KEY=sk-...) — these are for external MCPs, not a provider model key.
     const keyMatch = trimmed.match(/^([\w_]+)\s*[=:]\s*(\S+)/);
     if (keyMatch) {
       const [, envName] = keyMatch;
@@ -1099,7 +1107,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Everything else → send through bridge WebSocket as a Claude session
+    // Everything else → send through bridge WebSocket as an active engine session
     const send = wsSendRef.current;
     if (!send) {
       setState(s => {
@@ -1215,8 +1223,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   // Called by App.tsx when the WebSocket reconnects. Clears 'disconnected'
   // state and re-issues any in-flight prompt that was lost when the bridge
-  // died — the bridge persists each session's claudeSessionId to disk, so
-  // re-sending `start` resumes Claude with the prior conversation context.
+  // died — the bridge persists each engine's native session id to disk, so
+  // re-sending `start` resumes the active engine with shared conversation context.
   const onConnectionRestored = useCallback(() => {
     setState(s => {
       const next: Record<string, SessionChatState> = {};

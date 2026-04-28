@@ -2,7 +2,7 @@
 # ═══════════════════════════════════════════════════════════════
 # JANUS IA — DISPATCH REMINDER (UserPromptSubmit hook)
 # Scans the incoming user prompt for keywords that match the
-# CLAUDE.md DISPATCH PROTOCOL table. If matches, injects a gentle
+# AGENTS.md dispatch protocol. If matches, injects a gentle
 # context note reminding the model that an agent spec exists.
 #
 # NON-BLOCKING. The model decides whether to invoke. The goal is
@@ -25,7 +25,7 @@ PROMPT=$(parse_prompt)
 # Lowercase for keyword match
 LOWER=$(echo "$PROMPT" | tr '[:upper:]' '[:lower:]')
 
-# Map keyword → agent spec path (from CLAUDE.md DISPATCH PROTOCOL table)
+# Map keyword → agent spec path (from AGENTS.md agent registry)
 declare -A HITS=()
 
 match() {

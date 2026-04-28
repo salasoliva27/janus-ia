@@ -132,6 +132,7 @@
 /* ── Taskbar ── */
 
 .wm-taskbar {
+  position: relative;
   display: flex;
   align-items: center;
   height: 34px;
@@ -147,6 +148,21 @@
   gap: 4px;
   flex: 1;
   overflow-x: auto;
+}
+
+.wm-taskbar__janus-wordmark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 122px;
+  height: 24px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.92;
 }
 
 .wm-taskbar__item {

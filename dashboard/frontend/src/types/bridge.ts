@@ -2,11 +2,13 @@
 // These types define the WebSocket protocol between frontend and bridge
 
 export type ClientMessage =
-  | { type: "start"; prompt: string; cwd?: string; sessionId?: string }
-  | { type: "follow_up"; prompt: string; sessionId?: string }
+  | { type: "start"; prompt: string; cwd?: string; sessionId?: string; agentId?: string; modelId?: string }
+  | { type: "follow_up"; prompt: string; sessionId?: string; agentId?: string; modelId?: string }
   | { type: "permission_response"; id: string; allowed: boolean; sessionId?: string }
   | { type: "interrupt"; sessionId?: string }
-  | { type: "fork"; parentSessionId: string; newSessionId: string; forkLabel: string; forkMessageIndex: number };
+  | { type: "fork"; parentSessionId: string; newSessionId: string; forkLabel: string; forkMessageIndex: number }
+  | { type: "set_agent"; sessionId?: string; agentId: string; modelId?: string }
+  | { type: "set_model"; sessionId?: string; modelId: string };
 
 export type ServerMessage =
   | { type: "claude_message"; message: unknown; sessionId?: string }

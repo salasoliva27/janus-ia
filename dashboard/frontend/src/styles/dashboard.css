@@ -78,6 +78,18 @@
   position: relative;
   z-index: 9000;
 }
+.janus-wordmark__text {
+  font-family: "Times New Roman", "Cinzel", serif;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0;
+  word-spacing: 4px;
+  color: color-mix(in oklch, var(--color-text-primary) 86%, var(--color-accent));
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
 .top-bar__brand-logo {
   height: 22px;
   width: auto;
@@ -3651,7 +3663,7 @@
 }
 .theme-engine__preset--add:hover .theme-engine__preview--add { color: var(--color-accent); }
 
-/* Agent picker — TopBar dropdown for Claude / Codex / Gemini */
+/* Engine picker — TopBar dropdown for Claude / Codex / Gemini */
 .agent-picker { position: relative; }
 .agent-picker__btn {
   display: flex; align-items: center; gap: 6px;
@@ -3824,7 +3836,7 @@ html[data-theme="space"] .card {
   box-shadow: 0 2px 20px -4px oklch(0.15 0.08 290 / 0.6);
 }
 
-/* The model/agent pickers get a soft glow in space so they lift off the sky. */
+/* The model/engine pickers get a soft glow in space so they lift off the sky. */
 html[data-theme="space"] .agent-picker__btn {
   box-shadow: 0 0 24px -6px oklch(0.74 0.22 330 / 0.35);
 }

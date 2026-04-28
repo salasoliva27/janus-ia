@@ -189,7 +189,7 @@ function AgentPicker({ onCredentials }: { onCredentials?: () => void }) {
       <button
         className="agent-picker__btn"
         onClick={() => setOpen(v => !v)}
-        title={activeAgent?.reason || `Agent: ${activeLabel}`}
+        title={activeAgent?.reason || `Engine: ${activeLabel}`}
       >
         <span className="agent-picker__dot" style={{
           background: activeAgent?.available === false ? 'oklch(0.65 0.2 25)' : 'var(--color-accent)',
@@ -408,6 +408,11 @@ const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
   'claude-sonnet-4-6': 200_000,
   'claude-sonnet-4-5': 200_000,
   'claude-haiku-4-5': 200_000,
+  'gpt-5.5': 1_000_000,
+  'gpt-5.4': 1_000_000,
+  'gpt-5.4-mini': 400_000,
+  'gpt-5.4-nano': 400_000,
+  'gpt-5.2-codex': 400_000,
   'gpt-5-codex': 200_000,
   'gpt-5': 200_000,
   'gpt-4.1': 1_000_000,
@@ -453,7 +458,7 @@ function ContextUsage() {
   const modelId = useActiveModelId();
 
   // Rough token estimate: ~1 token per 4 chars of content, plus overhead per message/tool call
-  const BASE_TOKENS = 20_000; // system prompt + CLAUDE.md
+  const BASE_TOKENS = 20_000; // system prompt + AGENTS.md
   const CONTEXT_LIMIT = MODEL_CONTEXT_WINDOWS[modelId] ?? DEFAULT_CONTEXT_WINDOW;
   const msgTokens = chatMessages.reduce((sum, m) => {
     const contentTokens = Math.ceil(m.content.length / 4);

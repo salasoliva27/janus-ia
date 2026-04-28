@@ -60,6 +60,13 @@ Mexico/LATAM queries return good results. Core tool for research agent.
 - [2026-04-16] — janus — FIXED: Was failing with ERR_MODULE_NOT_FOUND. Root cause: node_modules not installed. `npm install` fixed it. `janus_memories` table has 21 rows, `memories` table has 32.
 - Full-text search works without VOYAGE_API_KEY; semantic search optional upgrade
 
+### Snowflake MCP
+**Verdict:** UNTESTED — configured 2026-04-28 for shared engine access
+**Install:** `scripts/snowflake-mcp --service-config-file mcp-servers/snowflake/tools_config.yaml --connection-name default` (`uvx` if installed, otherwise `pipx run`)
+**Keys:** `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PASSWORD`, `SNOWFLAKE_ROLE`, `SNOWFLAKE_WAREHOUSE`, `SNOWFLAKE_DATABASE`
+**Why:** Snowflake should be a brain-level data tool, not a Claude-only tool. The dashboard SQL console keeps its persistent Snowflake SDK connection; this MCP entry exposes Snowflake to engine CLI turns through `.mcp.json`.
+- [2026-04-28] — janus — CONFIGURED: Added to `.mcp.json` so Claude Code and Codex can receive the same Snowflake MCP surface. Live query test intentionally not run to avoid account/MFA side effects.
+
 ### Playwright MCP
 **Verdict:** GOOD
 Visual verification for all frontend changes. Owned by ux agent.

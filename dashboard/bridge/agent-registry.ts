@@ -1,4 +1,4 @@
-// Agent registry — pluggable CLI-based coding agents.
+// Engine registry — pluggable CLI-based coding CLIs.
 // Each adapter describes how to spawn the underlying CLI for a fresh turn or
 // a continuation, plus any env/credential requirements.
 
@@ -81,10 +81,12 @@ const claudeAdapter: AgentAdapter = {
 // ── OpenAI Codex CLI ─────────────────────────────────
 // Uses `codex exec` for headless / non-interactive turns. Resume by session id.
 const codexModels: ModelOption[] = [
-  { id: "gpt-5-codex", label: "GPT-5 Codex", note: "code-specialised default" },
-  { id: "gpt-5",       label: "GPT-5",       note: "general reasoning" },
-  { id: "o3",          label: "o3",          note: "deeper reasoning" },
-  { id: "o3-mini",     label: "o3-mini",     note: "fast reasoning" },
+  { id: "gpt-5.5",       label: "GPT-5.5",       note: "frontier coding + reasoning" },
+  { id: "gpt-5.4",       label: "GPT-5.4",       note: "lower cost frontier" },
+  { id: "gpt-5.4-mini",  label: "GPT-5.4 Mini",  note: "fast subagent work" },
+  { id: "gpt-5.4-nano",  label: "GPT-5.4 Nano",  note: "fastest triage" },
+  { id: "gpt-5.2-codex", label: "GPT-5.2 Codex", note: "agentic coding fallback" },
+  { id: "gpt-5-codex",   label: "GPT-5 Codex",   note: "legacy coding model" },
 ];
 const codexAdapter: AgentAdapter = {
   id: "codex",
@@ -93,13 +95,12 @@ const codexAdapter: AgentAdapter = {
   envVarRequired: "OPENAI_API_KEY",
   authMethod: "api-key",
   models: codexModels,
-  defaultModel: "gpt-5-codex",
+  defaultModel: "gpt-5.5",
   buildSpawn({ prompt, continueId, attachments, modelId }) {
+    const model = modelId && codexModels.some(m => m.id === modelId) ? modelId : "gpt-5.5";
     const args: string[] = continueId
-      ? ["exec", "resume", continueId]
-      : ["exec"];
-    const model = modelId && codexModels.some(m => m.id === modelId) ? modelId : "gpt-5-codex";
-    args.push("--model", model);
+      ? ["exec", "resume", "--model", model]
+      : ["exec", "--model", model];
     // Parity with Claude's --dangerously-skip-permissions. Jano's Codespace
     // is already the sandbox; extra gating would force Codex to refuse
     // anything that touches the network, filesystem, or subprocess (SQL,
@@ -113,6 +114,7 @@ const codexAdapter: AgentAdapter = {
     if (attachments && attachments.length > 0) {
       for (const p of attachments) { args.push("--image", p); }
     }
+    if (continueId) args.push(continueId);
     args.push(prompt);
     return { cli: "codex", args, outputFormat: "codex-json" };
   },
@@ -190,18 +192,40 @@ function isCliOnPath(cli: string): boolean {
   return present;
 }
 
+function hasEnv(name: string): boolean {
+  return typeof process.env[name] === "string" && process.env[name]!.length > 0;
+}
+
+function isCodexLoggedIn(): boolean {
+  try {
+    const out = execFileSync("codex", ["login", "status"], {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 3_000,
+    });
+    return /logged\s*in/i.test(out) && !/not\s*logged\s*in/i.test(out);
+  } catch {
+    return false;
+  }
+}
+
 export function listAgentAvailability(): AgentAvailability[] {
   return AGENTS.map(a => {
     const cliInstalled = isCliOnPath(a.cli);
     const envVar = a.envVarRequired ?? null;
     const envPresent = a.envVarRequired
-      ? typeof process.env[a.envVarRequired] === "string" && process.env[a.envVarRequired]!.length > 0
+      ? hasEnv(a.envVarRequired)
       : true;
-    const available = cliInstalled && envPresent;
+    const authPresent = a.id === "codex"
+      ? envPresent || hasEnv("CODEX_API_KEY") || (cliInstalled && isCodexLoggedIn())
+      : envPresent;
+    const available = cliInstalled && authPresent;
     let reason: string | undefined;
     if (!cliInstalled) {
       reason = `CLI '${a.cli}' not on PATH — install it to enable this adapter`;
-    } else if (!envPresent && a.envVarRequired) {
+    } else if (!authPresent && a.id === "codex") {
+      reason = "Run codex login or set OPENAI_API_KEY/CODEX_API_KEY";
+    } else if (!authPresent && a.envVarRequired) {
       reason = `Missing ${a.envVarRequired}`;
     }
     return {

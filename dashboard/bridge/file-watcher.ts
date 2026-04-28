@@ -5,7 +5,7 @@ import * as os from "node:os";
 import type { ServerMessage } from "./types.js";
 
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || "/workspaces/janus-ia";
-const CLAUDE_PROJECT_DIR = WORKSPACE_ROOT.replace(/\//g, "-");
+const ENGINE_PROJECT_DIR = WORKSPACE_ROOT.replace(/\//g, "-");
 
 const VAULT_PATHS = [
   path.join(WORKSPACE_ROOT, "concepts/**/*.md"),
@@ -23,13 +23,10 @@ const DASHBOARD_PATHS = [
   path.join(WORKSPACE_ROOT, "dashboard/bridge/**/*.ts"),
 ];
 
-const MEMORY_DIR = path.join(
-  os.homedir(),
-  ".claude",
-  "projects",
-  CLAUDE_PROJECT_DIR,
-  "memory"
-);
+const MEMORY_DIRS = Array.from(new Set([
+  path.join(os.homedir(), ".janus", "projects", ENGINE_PROJECT_DIR, "memory"),
+  path.join(os.homedir(), ".claude", "projects", ENGINE_PROJECT_DIR, "memory"),
+]));
 
 /** Parse a memory .md file into a learning object */
 function parseMemoryFile(filePath: string): ServerMessage | null {
@@ -143,10 +140,13 @@ function parseVaultFile(filePath: string): ServerMessage | null {
 /** Scan existing files and broadcast initial learnings */
 export function broadcastInitialLearnings(broadcast: (msg: ServerMessage) => void): void {
   // Scan auto-memory files
-  if (fs.existsSync(MEMORY_DIR)) {
-    for (const f of fs.readdirSync(MEMORY_DIR)) {
+  const seenMemory = new Set<string>();
+  for (const memoryDir of MEMORY_DIRS.filter(dir => fs.existsSync(dir))) {
+    for (const f of fs.readdirSync(memoryDir)) {
+      if (seenMemory.has(f)) continue;
+      seenMemory.add(f);
       if (!f.endsWith(".md") || f === "MEMORY.md") continue;
-      const msg = parseMemoryFile(path.join(MEMORY_DIR, f));
+      const msg = parseMemoryFile(path.join(memoryDir, f));
       if (msg) broadcast(msg);
     }
   }
@@ -196,8 +196,8 @@ export function startWatchers(broadcast: (msg: ServerMessage) => void): FSWatche
   // Watch auto-memory directory for live changes
   const watchers: FSWatcher[] = [vaultWatcher];
 
-  if (fs.existsSync(MEMORY_DIR)) {
-    const memWatcher = watch(path.join(MEMORY_DIR, "**/*.md"), {
+  for (const memoryDir of MEMORY_DIRS.filter(dir => fs.existsSync(dir))) {
+    const memWatcher = watch(path.join(memoryDir, "**/*.md"), {
       ignoreInitial: true,
       awaitWriteFinish: { stabilityThreshold: 300 },
     });

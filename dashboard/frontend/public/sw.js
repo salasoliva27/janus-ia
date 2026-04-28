@@ -8,7 +8,7 @@
 // If we ever want offline support (e.g. show "bridge unreachable, retry?"
 // when the connection drops mid-trip), add it here.
 
-const VERSION = "janus-pwa-v1";
+const VERSION = "janus-pwa-v2";
 
 self.addEventListener("install", (event) => {
   // Activate immediately on first install rather than waiting for all tabs to

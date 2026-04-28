@@ -379,7 +379,7 @@ function CustomThemeBuilder({ onCreated, onCancel }: { onCreated: (p: ThemePrese
       <div className="theme-engine__builder-title">Create from your brand</div>
       <div className="theme-engine__builder-hint">
         Drop your logo, brand guidelines (PDF), or a screenshot of your existing app.
-        Claude will read them and generate a matching theme.
+        The active engine will read them and generate a matching theme.
       </div>
       <div
         className="theme-engine__drop"

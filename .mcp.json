@@ -25,7 +25,7 @@
       "args": [
         "-y",
         "@modelcontextprotocol/server-filesystem",
-        "/workspaces"
+        "."
       ],
       "env": {}
     },
@@ -48,7 +48,7 @@
     "memory": {
       "command": "node",
       "args": [
-        "/workspaces/janus-ia/mcp-servers/memory/index.js"
+        "mcp-servers/memory/index.js"
       ],
       "env": {
         "SUPABASE_URL": "${SUPABASE_URL}",
@@ -57,6 +57,24 @@
         "NEO4J_URI": "${NEO4J_URI}",
         "NEO4J_USER": "${NEO4J_USER}",
         "NEO4J_PASSWORD": "${NEO4J_PASSWORD}"
+      }
+    },
+    "snowflake": {
+      "command": "bash",
+      "args": [
+        "scripts/snowflake-mcp",
+        "--service-config-file",
+        "mcp-servers/snowflake/tools_config.yaml",
+        "--connection-name",
+        "default"
+      ],
+      "env": {
+        "SNOWFLAKE_ACCOUNT": "${SNOWFLAKE_ACCOUNT}",
+        "SNOWFLAKE_USER": "${SNOWFLAKE_USER}",
+        "SNOWFLAKE_PASSWORD": "${SNOWFLAKE_PASSWORD}",
+        "SNOWFLAKE_ROLE": "${SNOWFLAKE_ROLE}",
+        "SNOWFLAKE_WAREHOUSE": "${SNOWFLAKE_WAREHOUSE}",
+        "SNOWFLAKE_DATABASE": "${SNOWFLAKE_DATABASE}"
       }
     },
     "context7": {
@@ -102,7 +120,7 @@
       "args": [
         "-y",
         "@bitbonsai/mcpvault@latest",
-        "/workspaces/janus-ia"
+        "."
       ],
       "env": {}
     },
@@ -113,7 +131,7 @@
         "obra-knowledge-graph"
       ],
       "env": {
-        "KG_VAULT_PATH": "/workspaces/janus-ia"
+        "KG_VAULT_PATH": "."
       }
     },
     "supabase": {

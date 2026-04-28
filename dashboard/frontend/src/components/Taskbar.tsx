@@ -73,6 +73,9 @@ export function Taskbar() {
           </button>
         ))}
       </div>
+      <div className="wm-taskbar__janus-wordmark" aria-label="J A N U S">
+        <span className="janus-wordmark__text">J A N U S</span>
+      </div>
       <div className="wm-taskbar__actions">
         <button
           className="wm-taskbar__reset"
