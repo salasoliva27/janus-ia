@@ -118,7 +118,13 @@ function loginPage(error?: string): string {
 
 interface AuthHandle {
   enforced: boolean;
-  bindWs(server: HttpServer, wss: WebSocketServer): void;
+  /**
+   * Wire the WS upgrade auth check.
+   * If `expectedPath` is set (e.g. "/ws"), only upgrade requests on that
+   * exact path are handled — others get a 400. If unset, any upgrade is
+   * passed to wss after auth check.
+   */
+  bindWs(server: HttpServer, wss: WebSocketServer, expectedPath?: string): void;
 }
 
 export function mountAuth(app: Express): AuthHandle {
@@ -130,8 +136,15 @@ export function mountAuth(app: Express): AuthHandle {
     }
     return {
       enforced: false,
-      bindWs(server, wss) {
+      bindWs(server, wss, expectedPath) {
         server.on("upgrade", (req, socket, head) => {
+          if (expectedPath) {
+            const url = new URL(req.url || "/", "http://x");
+            if (url.pathname !== expectedPath) {
+              (socket as Socket).destroy();
+              return;
+            }
+          }
           wss.handleUpgrade(req, socket as Socket, head, (ws) => {
             wss.emit("connection", ws, req);
           });
@@ -213,8 +226,15 @@ export function mountAuth(app: Express): AuthHandle {
 
   return {
     enforced: true,
-    bindWs(server: HttpServer, wss: WebSocketServer) {
+    bindWs(server: HttpServer, wss: WebSocketServer, expectedPath?: string) {
       server.on("upgrade", (req: IncomingMessage, socket, head) => {
+        if (expectedPath) {
+          const url = new URL(req.url || "/", "http://x");
+          if (url.pathname !== expectedPath) {
+            (socket as Socket).destroy();
+            return;
+          }
+        }
         // Run cookie-session on the upgrade request to populate req.session.
         // cookie-session reads req.headers.cookie and writes setHeader on
         // response — for upgrade we don't write back, so a stub response
