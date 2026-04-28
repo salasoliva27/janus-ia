@@ -17,7 +17,7 @@ Before starting any task, read `/home/codespace/.claude/projects/-workspaces-jan
 1. **Confirm the mental model** — map to a known pattern (Windows, macOS, VS Code) and confirm before coding
 2. **Always `cd frontend && npx vite build`** after any frontend source change — the dashboard serves from dist/
 3. **Ask, don't iterate** — if attempt 1 misses, ask what's wrong before building attempt 2
-4. **Write the correction BEFORE the fix** — capture to memory first, then code
+4. **Write the correction BEFORE the fix** — capture to memory first, then code. (Mechanically enforced 2026-04-28 for high-confidence redirects: `correction-flag-guard.sh` blocks every tool except `capture_correction` / `remember` until the correction is captured. False-positive escape: `remember(type="learning", tags=["false-positive","correction-hook-tuning"])`.)
 5. **Check what's actually rendering** — use `elementFromPoint()` before debugging "why doesn't X work"
 
 If you catch yourself about to rewrite something for the 2nd time without asking Jano, stop and ask.
@@ -37,73 +37,25 @@ You are NOT a passive logger. You actively challenge, propose, evaluate, and coo
 
 ---
 
-## DISPATCH PROTOCOL — EVERY REQUEST GOES THROUGH THIS
+## DISPATCH PROTOCOL
 
-Before starting any work, identify what kind of task this is and route it:
+Routing happens via `scripts/dispatch-reminder.sh` (UserPromptSubmit hook) — when a prompt's keywords match an agent spec, the hook injects the agent path into context so you read it before acting. The agent files themselves are listed in §AGENTS below.
 
-| Task type | Agent | Tools to check | Skills to check |
-|---|---|---|---|
-| New idea / product intake | agents/core/intake.md | Brave Search | deep-research |
-| Software build / code | agents/core/developer.md | GitHub, Context7, Playwright | feature-dev, frontend-design |
-| Frontend / UI change | agents/core/developer.md + agents/core/ux.md | Playwright | frontend-design |
-| Deploy to UAT or prod | agents/core/deploy.md | GitHub | — |
-| Market / competitor research | agents/core/research.md | NotebookLM, Brave, Firecrawl | deep-research |
-| Legal review | agents/core/legal.md | Brave Search | owasp-security (if code) |
-| Financial / burn / revenue | agents/core/financial.md | Google Workspace (Sheets) | xlsx |
-| Calendar / scheduling | agents/core/calendar.md | Google Workspace (Calendar) | — |
-| Cross-project proposal | agents/core/trickle-down.md | GitHub (all repos) | — |
-| Nutrition / clinical | agents/domain/nutrition.md | USDA API, Open Food Facts | — |
-| Performance / metrics | agents/core/performance.md | Google Workspace (Sheets) | xlsx |
-| Visual verification | agents/core/ux.md | Playwright | — |
-| Security review / vulnerability | agents/core/security.md | Playwright, GitHub | owasp-security |
-| Product coherence / "this doesn't make sense" | agents/core/oversight.md | Playwright | — |
-| Pre-demo / pre-launch audit | agents/core/oversight.md | Playwright | — |
-| Marketing / campaigns / content / video | agents/core/marketing.md | Brave, Magic MCP, Gmail, Playwright, Remotion MCP | ckm-brand, ckm-design |
-| Self-improvement / `/evolve` | commands/evolve.md + agents/core/evolve.md | Brave, GitHub | — |
-| Files in dump/ | (auto-route) | GitHub, Filesystem | — |
+Audit 2026-04-28: the previous 16-row routing table here was dead duplication of the hook. Removed. If the dispatch keywords need tuning, edit `scripts/dispatch-reminder.sh`, not this section.
 
-### The dispatch loop (runs for every task)
+### Verification expectations
 
-**0. THINK FIRST** — before any non-trivial task, use `mcp__sequential-thinking__sequentialthinking` to reason through:
-- What exactly is being asked?
-- What context do I have vs. what do I need?
-- What could go wrong or be missing?
-- What's the right order of operations?
+For UI / frontend / API changes, run `agents/core/ux.md`'s layered verification (code review → start server → visual at desktop+mobile → functional click-through → cross-environment if shared components → security if auth/data/APIs). Do not report done without the layers that apply.
 
-This step is mandatory for: any build task, any audit, any financial or legal decision, any cross-project proposal, any deploy. Skip only for single-file edits or direct factual lookups.
+### Output routing
 
-**1. IDENTIFY** — what kind of task is this?
-
-**2. DISPATCH** — read the agent file before doing anything
-
-**3. LOOKUP** — agent checks registries:
-- tools/registry.md → what's GOOD and relevant?
-- skills/registry.md → what's relevant and installed?
-- Load the SKILL.md before starting
-
-**4. EXECUTE** — do the work with full context
-
-**5. VERIFY** — mandatory before reporting done
-Read agents/core/ux.md and run the full verification protocol.
-This means ALL applicable layers — not just a screenshot:
-- Layer 0: code review (read changed files, invoke /code-review if installed)
-- Layer 1: start server and confirm it runs without errors
-- Layer 2: visual check at desktop + mobile viewports (Playwright screenshots)
-- Layer 3: functional testing — actually click through the main flows
-- Layer 4: cross-environment check if change touches shared components
-- Layer 5: security check if change touches auth, data, or APIs
-
-See agents/core/ux.md for the full layer applicability table.
-**Do not skip verification. Do not report done without it.**
-
-**6. OUTPUT ROUTING** — where does the result go?
-Code, configs → GitHub (product repo)
-Documents, reports → outputs/documents/[project]/[name]_V[N]_[date].[ext]
-Research → outputs/research/[project]/
-Screenshots → outputs/screenshots/[project]/
-Learnings → `mcp__obsidian-vault__patch_note("learnings/[file]")` — patch the relevant section
-Cross-project patterns → `mcp__obsidian-vault__patch_note("concepts/[slug]")` — create if new
-Project status → `mcp__obsidian-vault__patch_note("PROJECTS")` + projects/[env]/[product].md
+| Artifact type | Destination |
+|---|---|
+| Code, configs | GitHub (product repo) |
+| Documents, reports | `outputs/documents/[project]/[name]_V[N]_[date].[ext]` |
+| Research | `outputs/research/[project]/` |
+| Screenshots | `outputs/screenshots/[project]/` |
+| Learnings / patterns / project status | Direct edits to `learnings/`, `concepts/`, `PROJECTS.md` (the Obsidian vault MCP is unreliable — use the Edit tool; the vault IS the filesystem) |
 
 ---
 
@@ -125,8 +77,8 @@ All API keys live in Jano's private dotfiles repo (`salasoliva27/dotfiles`) and 
 |---|---|---|
 | Anthropic API key | `$ANTHROPIC_API_KEY` | Claude API calls |
 | Brave Search API key | `$BRAVE_API_KEY` | Market research, competitor analysis |
-| Supabase URL | `$SUPABASE_URL` | janus_memories table + all project tables |
-| Supabase service role key | `$SUPABASE_SERVICE_ROLE_KEY` | janus_memories table + all project tables |
+| Supabase URL | `$SUPABASE_URL` | `memories` table + all project tables |
+| Supabase service role key | `$SUPABASE_SERVICE_ROLE_KEY` | `memories` table + all project tables |
 
 To add new credentials: Jano adds them to `salasoliva27/dotfiles/.env` → they appear in all Codespaces automatically. Never store secrets directly in any project repo.
 
@@ -214,31 +166,16 @@ Jano can override mid-session by saying "switch to smart" or "switch to manual":
 6. If Obsidian vault MCP is available: `search_notes(query)` for topic-relevant notes
    - If unavailable: read relevant files from `concepts/` and `learnings/` directly
 
-#### 1c — MANDATORY CROSS-SYNTHESIS
-Before responding to anything, complete these checks silently:
+#### 1c — Cross-synthesis (surface what's relevant, don't manufacture it)
 
-**Legal:** Does this session touch any project with LFPDPPP or Ley Fintech exposure?
-Surface it if yes.
+When the request actually touches them, surface:
+- **Legal exposure** (LFPDPPP, Ley Fintech, SAT/CFDI) — see `learnings/cross-project-map.md`
+- **Market overlap** with another active project (CDMX colonia targeting especially)
+- **Tech reuse** — if a pattern is solved elsewhere, point to it instead of rebuilding
+- **Capacity** — if the backlog is full (preflight reports this), flag before accepting new work
+- **Applicable corrections** — preflight injects the last 3; honor them
 
-**Market:** Does this request overlap with another project's geography or audience?
-Mention the connection.
-
-**Tech:** Has this pattern been solved in another project already?
-Point to it instead of rebuilding.
-
-**Capacity:** Is the backlog still full? (Pre-flight output shows this)
-Flag if Jano is about to commit to new work.
-
-**Corrections:** Do any stored corrections apply to what you're about to do?
-Apply them silently. Don't repeat past mistakes.
-
-**Graph:** Run one structural query against the Neo4j brain to surface recent growth or drift. Default:
-```
-mcp__janus-memory__graph_query(cypher="MATCH (p:Project)<-[:MENTIONS]-(m) WHERE m.date >= date() - duration('P7D') RETURN p.id, count(m) AS recent_activity ORDER BY recent_activity DESC LIMIT 10")
-```
-If the request names a specific project/concept, swap in a targeted query (e.g. `MATCH (p:Project {id:"lool-ai"})<-[:MENTIONS]-(m) RETURN m.date, m.preview ORDER BY m.date DESC LIMIT 10`). The graph is the only view that sees typed structure across vault + memories — use it to catch patterns the prose misses.
-
-This synthesis runs in ~10 seconds. It is NOT optional.
+Audit 2026-04-28: the previous "MANDATORY 5-step silent ritual" was unobserved in 100% of audited sessions. Surfacing concerns when they apply works; reciting a checklist on every prompt does not.
 
 #### 1d — Session state
 7. Check `dump/` — route any files
@@ -251,24 +188,14 @@ This is explicitly answered by the recall results above. Summarize:
 - What the immediate next steps are
 - Any open questions or blockers
 
-### VAULT PLASTICITY — RUNS MID-SESSION (not just at the end)
+### VAULT PLASTICITY (use the Edit tool, not the Obsidian MCP)
 
-The vault is a living brain. It restructures as understanding changes. Apply these rules **as insights surface**, not just at end of session:
+The vault is a living brain. When a real insight surfaces:
+- **If a relevant note exists** → REWRITE the affected section. Don't append a correction below the old claim — replace it. The brain replaces outdated beliefs; it doesn't accumulate contradictions.
+- **If a pattern repeats across 2+ projects** → it earns a node in `concepts/`. Cross-link both projects to it.
+- **If two ideas connect** → add `[[links]]` in both notes. The graph edge is the insight.
 
-**When a new insight appears:**
-1. `mcp__obsidian-vault__search_notes` — does a relevant note already exist?
-2. If yes → `mcp__obsidian-vault__patch_note` — UPDATE the relevant section. Do not just append. Rewrite if understanding changed.
-3. If no → `mcp__obsidian-vault__write_note` — create `concepts/[slug].md` with proper frontmatter + [[links]]
-4. Always add `[[links]]` to connect the new knowledge to existing notes
-
-**When a pattern repeats across 2+ projects:**
-→ It earns its own concept node in `concepts/`. Link both projects to it.
-
-**When something turns out to be wrong:**
-→ Rewrite the note, don't append a correction. The brain replaces outdated beliefs, it doesn't accumulate contradictions.
-
-**When two previously separate ideas connect:**
-→ Add `[[links]]` in both notes pointing at each other. The graph edge is the insight.
+Use the Edit / Write tools directly. The Obsidian MCP is unreliable in this repo (read_note/search_notes fail on existing files); the vault IS the filesystem.
 
 **Vault structure:**
 - `wiki/` → project knowledge (what each project is, its state, its stack)
@@ -306,10 +233,18 @@ mcp__janus-memory__remember(
 )
 ```
 
-#### Correction capture is NON-NEGOTIABLE
-Every time Jano redirects you, call `capture_correction()` immediately:
+#### Correction capture (mechanically enforced for high-confidence redirects)
+
+When Jano redirects you, call `mcp__memory__capture_correction` immediately.
+
+For high-confidence redirect signals ("you're wrong", "don't do that", "no no", "redirect", "stop doing", "wrong approach", or Spanish equivalents) the `correction-flag-guard.sh` PreToolUse hook now BLOCKS every other tool until `capture_correction` (or a correction-typed `remember`) is called. False-positive escape hatch: `mcp__memory__remember(type="learning", tags=["false-positive","correction-hook-tuning"], ...)` clears the flag and tunes future detection.
+
+For soft signals (single "no" / "actually" / "instead"), the hook only reminds. The model decides.
+
+Audit 2026-04-28: previous reminder-only enforcement captured 0/19 redirects in one session. The blocking hook is the proven shape (same mechanism as the stop-gate's memory-count enforcement, which sustains a median of 4 memories/session).
+
 ```
-mcp__janus-memory__capture_correction(
+mcp__memory__capture_correction(
   original="what I did or was about to do",
   correction="what Jano said",
   context="why this matters for future sessions",
@@ -538,22 +473,13 @@ Agents check these registries before every task.
 Never use a tool or skill without checking the registry first.
 Never install a tool or skill without logging it in the registry.
 
-### SKILL AUTO-INSTALL RULE
+### SKILLS
 
-If a task requires a skill that appears in TOOLS.md (CURRENTLY INSTALLED SKILLS table) or skills/registry.md (INSTALLED AND WORKING sections) — **install it automatically without asking**. Do not prompt for confirmation. Skills in the registry are pre-approved.
+The auto-reconciled block at the top of `skills/registry.md` is the source of truth for what's invokable right now (regenerated on every preflight by `scripts/reconcile-skills.sh`). The wishlist sections below it list things that *could* be installed but aren't.
 
-Install command: `npx skills add [repo-url]` or `/plugin marketplace add [org/repo]`
-After installing, invoke it immediately for the task at hand.
+If a task plausibly benefits from a skill, check the auto block. If it's there, use it. If it's not and it's worth installing, prefer `/plugin marketplace add` (persistent across Codespace rebuilds) over `npx skills add` (wiped on rebuild).
 
-### MANDATORY PRE-TASK CHECKLIST (run before every build/edit task)
-
-Before touching any code or files, you MUST complete this checklist:
-
-1. **Read ALL existing files** in the target project — never assume, always read. List every file and its purpose before changing anything.
-2. **Audit existing content** — write a mental inventory of every section, image, piece of text, and feature that currently exists. Nothing gets deleted unless Jano explicitly says to remove it.
-3. **Check all portfolio repos** — `mcp__github__search_repositories` for `user:salasoliva27` to see all repos. Check if any have relevant code or patterns you can reuse.
-4. **Search online for skills/tools** — before building anything non-trivial, search the skill registries (awesome-claude-skills, VoltAgent/awesome-agent-skills) for an existing skill that covers it.
-5. **Inventory installed skills** — `ls ~/.agents/skills/ && ls ~/.claude/skills/` before any UI/animation/frontend task.
+Audit 2026-04-28: the previous "auto-install / 5-step pre-task checklist / inventory `~/.claude/skills/` first" rules were 0% adhered-to over 30+ days. Cut. The reconciler does the inventory mechanically.
 
 ### NO-DELETE RULE
 
