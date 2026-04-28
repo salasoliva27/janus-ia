@@ -20,6 +20,7 @@ import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { McpSupervisor, defaultSidecars } from "./mcp-supervisor.js";
+import { mountAuth } from "./auth.js";
 
 // DASH_HOME = where the dashboard code lives (janus-ia/dashboard/..). Always
 // derived from this file's own location so it works regardless of wrapper mode.
@@ -96,6 +97,11 @@ export function startServer(port: number): Promise<http.Server> {
   };
   process.once("SIGTERM", shutdownMcp);
   process.once("SIGINT", shutdownMcp);
+
+  // Auth gate (no-op when ENFORCE is false — see auth.ts). Mounted BEFORE any
+  // routes so the cookie-session middleware applies to all of them, and
+  // requireAuth fires before the route handlers.
+  const auth = mountAuth(app);
 
   app.get("/api/mcp/status", (_req, res) => {
     res.json({ sidecars: mcpSupervisor.status() });
@@ -1616,7 +1622,11 @@ Do not include anything except the JSON object.`;
   }
 
   const server = http.createServer(app);
-  const wss = new WebSocketServer({ server });
+  // noServer: auth.bindWs handles the upgrade event so it can validate the
+  // session cookie before letting the WS through. When auth is disabled the
+  // bindWs handler still wires the same upgrade pass-through.
+  const wss = new WebSocketServer({ noServer: true });
+  auth.bindWs(server, wss);
 
   // One SessionManager per bridge process, not per WS connection. This lets
   // Claude child processes survive browser blips / tab reloads / Codespaces
