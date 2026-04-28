@@ -46,8 +46,18 @@
       "env": {}
     },
     "memory": {
-      "type": "http",
-      "url": "http://127.0.0.1:3211/mcp"
+      "command": "node",
+      "args": [
+        "/workspaces/janus-ia/mcp-servers/memory/index.js"
+      ],
+      "env": {
+        "SUPABASE_URL": "${SUPABASE_URL}",
+        "SUPABASE_SERVICE_ROLE_KEY": "${SUPABASE_SERVICE_ROLE_KEY}",
+        "VOYAGE_API_KEY": "${VOYAGE_API_KEY}",
+        "NEO4J_URI": "${NEO4J_URI}",
+        "NEO4J_USER": "${NEO4J_USER}",
+        "NEO4J_PASSWORD": "${NEO4J_PASSWORD}"
+      }
     },
     "context7": {
       "command": "npx",

@@ -135,16 +135,25 @@ AGENT_COUNT=$(find "$WORKSPACE/agents" -name "*.md" 2>/dev/null | wc -l)
 echo "  Concepts: ${CONCEPT_COUNT} | Learnings: ${LEARNING_COUNT} | Agents: ${AGENT_COUNT}"
 
 # ─── Skill integrity check ─────────────────────────────────────
-# skills/registry.md claims INSTALLED — verify ~/.claude/skills/ isn't empty.
-# Codespace ephemerality repeatedly wipes installs and the registry doesn't know.
+# Three skill sources:
+#   /mnt/skills/public/*           BUILT-IN  (always available, ephemeral-proof)
+#   ~/.claude/plugins/marketplaces  PLUGINS   (installed via /plugin)
+#   ~/.claude/skills/*             USER-INSTALLED (npx skills add ...)
+# Only USER-INSTALLED skills are vulnerable to Codespace recycling.
 mkdir -p "$HOME/.claude/skills" 2>/dev/null || true
-SKILL_DIR_COUNT=$( { find "$HOME/.claude/skills" -maxdepth 1 -mindepth 1 -type d 2>/dev/null || true; } | wc -l)
-REGISTRY_CLAIMS=$(grep -c "^### .* INSTALLED\|INSTALLED 2026" "$WORKSPACE/skills/registry.md" 2>/dev/null || echo 0)
-if [ "${REGISTRY_CLAIMS:-0}" -gt 0 ] && [ "${SKILL_DIR_COUNT:-0}" -eq 0 ]; then
-  echo "  ⚠ Skills: registry claims ${REGISTRY_CLAIMS} installed, but ~/.claude/skills/ is EMPTY"
-  echo "    → Codespace ephemerality likely wiped them. Re-install via the registry entries, or update the registry."
-else
-  echo "  Installed skills: ${SKILL_DIR_COUNT} dirs in ~/.claude/skills/"
+BUILTIN_COUNT=$( { find /mnt/skills/public -maxdepth 1 -mindepth 1 -type d 2>/dev/null || true; } | wc -l)
+USER_COUNT=$( { find "$HOME/.claude/skills" -maxdepth 1 -mindepth 1 -type d 2>/dev/null || true; } | wc -l)
+PLUGIN_COUNT=$( { find "$HOME/.claude/plugins/marketplaces" -maxdepth 3 -mindepth 1 -type d -name "skills" 2>/dev/null || true; } | wc -l)
+echo "  Skills: ${BUILTIN_COUNT} built-in · ${USER_COUNT} user-installed · ${PLUGIN_COUNT} plugin"
+
+# If the registry asks for user-installed skills but ~/.claude/skills/ is empty,
+# attempt auto-install from a manifest (skills/auto-install.sh). Codespace
+# ephemerality is the single biggest source of skill drift.
+if [ -x "$WORKSPACE/scripts/install-skills.sh" ] && [ "${USER_COUNT:-0}" -eq 0 ]; then
+  EXPECTED=$(grep -c "^# user-install:" "$WORKSPACE/scripts/install-skills.sh" 2>/dev/null || echo 0)
+  if [ "${EXPECTED:-0}" -gt 0 ]; then
+    echo "  → ${EXPECTED} user-skill(s) expected but missing. Run: bash scripts/install-skills.sh"
+  fi
 fi
 
 # Check PROJECTS.md exists and has content

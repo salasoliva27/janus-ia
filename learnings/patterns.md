@@ -1,5 +1,5 @@
 # PATTERNS — CROSS-PROJECT LEARNINGS
-## Last updated: 2026-04-13
+## Last updated: 2026-04-28
 
 > See [[concepts/]] directory for the full abstraction layer — each validated pattern lives there with project evidence and [[links]].
 
@@ -36,7 +36,9 @@ This file captures patterns that repeat across projects. The master agent reads 
 ### Build reality
 - Dashboard shell is a reusable architecture. Venture OS → Ozum AI-OS adaptation took 1 session with zero structural changes. See [[concepts/dashboard-shell]].
 - Multi-agent parallel builds require shared type contracts written FIRST — independent agents inventing types causes 70+ compile errors.
-- Build sessions produce artifacts but NOT learnings. 113 commits in 30 days, but the only real knowledge capture was from one /evolve session. The system has a build-first bias that starves the learning layer.
+- **Build-first bias** (validated 2x): build sessions produce artifacts but NOT learnings. 113 commits in 30 days, only one /evolve session captured durable knowledge. See [[concepts/protocol-enforcement]].
+- **Meta-awareness ≠ behavior change** (2026-04-28): writing `concepts/protocol-enforcement.md` (2026-04-17) added a diagnostic surface (preflight warnings) but did not stop the drift. Eleven days later the same warnings fired: 4-day memory gap, 80h-stale anchor, 13 vault notes append-only. **Diagnostic is not corrective.** The corrective action is changing the trigger that produces behavior — e.g. making `mcp__memory__remember` always-available so the LLM has no fallback excuse, and auto-installing skills so registry/disk drift can't accumulate.
+- **MCP availability is load-bearing** (2026-04-28): the inline-capture protocol assumes `mcp__memory__*` tools exist. When `.mcp.json` declared the memory server as HTTP-supervised-by-bridge but the bridge didn't start it, the LLM silently fell back to file-only memory. Stdio-spawned MCPs decouple tool availability from any other process. Switched memory MCP to stdio in commit-of-the-day.
 
 ### GTM reality  
 - No data yet — will populate as projects reach GTM phase.
