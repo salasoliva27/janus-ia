@@ -4,7 +4,7 @@ import path from "node:path";
 import os from "node:os";
 import type { WebSocket } from "ws";
 import type { ServerMessage } from "./types.js";
-import { getAgent } from "./agent-registry.js";
+import { getAgent, getAgentAvailability } from "./agent-registry.js";
 import { workspaceStateSlug } from "./path-utils.js";
 
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || "/workspaces/janus-ia";
@@ -252,6 +252,22 @@ export class ClaudeSession {
     fullPrompt = this.buildEngineHandoff(fullPrompt);
 
     const adapter = getAgent(this.agentId);
+    const availability = getAgentAvailability(this.agentId);
+    if (!availability.available) {
+      this.send({
+        type: "error",
+        message: availability.reason || `${adapter.label} is not available on this machine.`,
+        sessionId: this.sessionId,
+      });
+      this.send({
+        type: "session_end",
+        cost: undefined,
+        usage: undefined,
+        sessionId: this.sessionId,
+      });
+      return;
+    }
+
     const spawnSpec = adapter.buildSpawn({
       prompt: fullPrompt,
       continueId: this.engineSessionId,

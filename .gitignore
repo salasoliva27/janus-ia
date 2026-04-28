@@ -8,6 +8,7 @@ outputs/screenshots/
 *.png
 !dashboard/frontend/public/themes/*.png
 !dashboard/frontend/dist/themes/*.png
+dashboard/frontend/dist/.janus-build-rev
 # Obsidian personal state (do not commit — machine-specific)
 .obsidian/workspace.json
 .obsidian/workspace-mobile.json

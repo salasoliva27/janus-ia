@@ -5,6 +5,7 @@
 import { execFileSync } from "node:child_process";
 
 const IS_WIN = process.platform === "win32";
+const AUTH_CHECK_TTL_MS = 5_000;
 
 export interface AgentStartSpec {
   prompt: string;
@@ -76,7 +77,15 @@ const claudeAdapter: AgentAdapter = {
       "--disable-slash-commands",
     ];
     if (continueId) args.push("--resume", continueId);
-    return { cli: "claude", args, envUnset: ["ANTHROPIC_API_KEY"], outputFormat: "stream-json" };
+    // Prefer Claude subscription OAuth when present, but do not force it.
+    // On a new laptop/fork the user may only have ANTHROPIC_API_KEY in .env;
+    // stripping it would make the CLI appear to hang behind auth.
+    return {
+      cli: "claude",
+      args,
+      envUnset: isClaudeLoggedIn() ? ["ANTHROPIC_API_KEY"] : undefined,
+      outputFormat: "stream-json",
+    };
   },
 };
 
@@ -178,6 +187,7 @@ export interface AgentAvailability {
 // 5s cache so the chat-init handler doesn't fork `which` on every call.
 const CLI_CHECK_TTL_MS = 5_000;
 const cliPresenceCache = new Map<string, { present: boolean; checkedAt: number }>();
+const authPresenceCache = new Map<string, { present: boolean; checkedAt: number }>();
 
 function isCliOnPath(cli: string): boolean {
   const cached = cliPresenceCache.get(cli);
@@ -198,7 +208,35 @@ function hasEnv(name: string): boolean {
   return typeof process.env[name] === "string" && process.env[name]!.length > 0;
 }
 
+function isClaudeLoggedIn(): boolean {
+  const cached = authPresenceCache.get("claude");
+  const now = Date.now();
+  if (cached && now - cached.checkedAt < AUTH_CHECK_TTL_MS) return cached.present;
+  let present = false;
+  try {
+    const cleanEnv = { ...process.env };
+    delete cleanEnv.ANTHROPIC_API_KEY;
+    const out = execFileSync("claude", ["auth", "status", "--json"], {
+      env: cleanEnv,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 3_000,
+      shell: IS_WIN,
+    });
+    const parsed = JSON.parse(out);
+    present = Boolean(parsed?.loggedIn || parsed?.authenticated || parsed?.authMethod === "claude.ai");
+  } catch {
+    present = false;
+  }
+  authPresenceCache.set("claude", { present, checkedAt: now });
+  return present;
+}
+
 function isCodexLoggedIn(): boolean {
+  const cached = authPresenceCache.get("codex");
+  const now = Date.now();
+  if (cached && now - cached.checkedAt < AUTH_CHECK_TTL_MS) return cached.present;
+  let present = false;
   try {
     const out = execFileSync("codex", ["login", "status"], {
       encoding: "utf-8",
@@ -206,28 +244,32 @@ function isCodexLoggedIn(): boolean {
       timeout: 3_000,
       shell: IS_WIN,
     });
-    return /logged\s*in/i.test(out) && !/not\s*logged\s*in/i.test(out);
+    present = /logged\s*in/i.test(out) && !/not\s*logged\s*in/i.test(out);
   } catch {
-    return false;
+    present = false;
   }
+  authPresenceCache.set("codex", { present, checkedAt: now });
+  return present;
 }
 
 export function listAgentAvailability(): AgentAvailability[] {
   return AGENTS.map(a => {
     const cliInstalled = isCliOnPath(a.cli);
-    const envVar = a.envVarRequired ?? null;
-    const envPresent = a.envVarRequired
-      ? hasEnv(a.envVarRequired)
-      : true;
+    const envVar = a.envVarRequired ?? (a.id === "claude" ? "ANTHROPIC_API_KEY" : null);
+    const envPresent = a.envVarRequired ? hasEnv(a.envVarRequired) : true;
     const authPresent = a.id === "codex"
-      ? envPresent || hasEnv("CODEX_API_KEY") || (cliInstalled && isCodexLoggedIn())
-      : envPresent;
+      ? hasEnv("OPENAI_API_KEY") || hasEnv("CODEX_API_KEY") || (cliInstalled && isCodexLoggedIn())
+      : a.id === "claude"
+        ? hasEnv("ANTHROPIC_API_KEY") || (cliInstalled && isClaudeLoggedIn())
+        : envPresent;
     const available = cliInstalled && authPresent;
     let reason: string | undefined;
     if (!cliInstalled) {
       reason = `CLI '${a.cli}' not on PATH — install it to enable this adapter`;
     } else if (!authPresent && a.id === "codex") {
       reason = "Run codex login or set OPENAI_API_KEY/CODEX_API_KEY";
+    } else if (!authPresent && a.id === "claude") {
+      reason = "Run Claude auth login or set ANTHROPIC_API_KEY";
     } else if (!authPresent && a.envVarRequired) {
       reason = `Missing ${a.envVarRequired}`;
     }
@@ -244,4 +286,9 @@ export function listAgentAvailability(): AgentAvailability[] {
       reason,
     };
   });
+}
+
+export function getAgentAvailability(id: string | undefined | null): AgentAvailability {
+  const agent = getAgent(id);
+  return listAgentAvailability().find(a => a.id === agent.id)!;
 }

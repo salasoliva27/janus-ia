@@ -157,7 +157,17 @@ function AgentPicker({ onCredentials }: { onCredentials?: () => void }) {
       try {
         const r = await fetch('/api/agents');
         const j = await r.json();
-        if (!cancelled && Array.isArray(j.agents)) setAgents(j.agents);
+        if (!cancelled && Array.isArray(j.agents)) {
+          setAgents(j.agents);
+          const current = localStorage.getItem('venture-os-agent') || active;
+          const currentAgent = j.agents.find((a: AgentInfo) => a.id === current);
+          const fallback = j.agents.find((a: AgentInfo) => a.available);
+          if ((!currentAgent || !currentAgent.available) && fallback) {
+            localStorage.setItem('venture-os-agent', fallback.id);
+            setActive(fallback.id);
+            window.dispatchEvent(new CustomEvent('venture-os:agent-change', { detail: { agentId: fallback.id } }));
+          }
+        }
       } catch { /* bridge warming up */ }
     }
     load();
