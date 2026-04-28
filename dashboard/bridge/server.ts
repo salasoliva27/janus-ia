@@ -22,6 +22,7 @@ import { spawn } from "node:child_process";
 import { McpSupervisor, defaultSidecars } from "./mcp-supervisor.js";
 import { mountAuth } from "./auth.js";
 import { syncCodexMcpConfig } from "./codex-config.js";
+import { workspaceStateSlug } from "./path-utils.js";
 
 // DASH_HOME = where the dashboard code lives (janus-ia/dashboard/..). Always
 // derived from this file's own location so it works regardless of wrapper mode.
@@ -30,7 +31,7 @@ import { syncCodexMcpConfig } from "./codex-config.js";
 const DASH_HOME = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || DASH_HOME;
 const WORKSPACE_NAME = path.basename(WORKSPACE_ROOT);
-const ENGINE_PROJECT_DIR = WORKSPACE_ROOT.replace(/\//g, "-");
+const ENGINE_PROJECT_DIR = workspaceStateSlug(WORKSPACE_ROOT);
 const UPLOADS_DIR = path.join(WORKSPACE_ROOT, "dump", "uploads");
 const JANUS_STATE_DIR = path.join(os.homedir(), ".janus", "projects", ENGINE_PROJECT_DIR);
 const LEGACY_CLAUDE_STATE_DIR = path.join(os.homedir(), ".claude", "projects", ENGINE_PROJECT_DIR);
@@ -227,6 +228,7 @@ export function startServer(port: number): Promise<http.Server> {
       const child = spawn("claude", ["auth", "login", "--claudeai"], {
         env: cleanEnv,
         stdio: ["ignore", "pipe", "pipe"],
+        shell: process.platform === "win32",
       });
       claudeLoginChild = child;
       claudeLoginUrl = null;
@@ -282,7 +284,7 @@ export function startServer(port: number): Promise<http.Server> {
         claudeLoginUrl = null;
       }
       const { execFile } = await import("node:child_process");
-      execFile("claude", ["auth", "logout"], { timeout: 5_000 }, (err, stdout, stderr) => {
+      execFile("claude", ["auth", "logout"], { timeout: 5_000, shell: process.platform === "win32" }, (err, stdout, stderr) => {
         if (err) {
           res.status(500).json({ ok: false, error: String(err.message ?? err), stderr: String(stderr).slice(0, 300) });
           return;
@@ -307,7 +309,7 @@ export function startServer(port: number): Promise<http.Server> {
       // `codex login status` returns plain text: "Logged in" or "Not logged in".
       // OPENAI_API_KEY in env doesn't override OAuth the way Claude's does, but
       // we still report envKeySet so the UI can call out the fallback path.
-      execFile("codex", ["login", "status"], { timeout: 5_000 }, (err, stdout, stderr) => {
+      execFile("codex", ["login", "status"], { timeout: 5_000, shell: process.platform === "win32" }, (err, stdout, stderr) => {
         if (err && !stdout) {
           res.json({ loggedIn: false, error: String(err.message ?? err), envKeySet: !!process.env.OPENAI_API_KEY });
           return;
@@ -351,6 +353,7 @@ export function startServer(port: number): Promise<http.Server> {
       const child = spawn("codex", ["login"], {
         env: cleanEnv,
         stdio: ["ignore", "pipe", "pipe"],
+        shell: process.platform === "win32",
       });
       codexLoginChild = child;
       codexLoginUrl = null;
@@ -405,7 +408,7 @@ export function startServer(port: number): Promise<http.Server> {
         codexLoginUrl = null;
       }
       const { execFile } = await import("node:child_process");
-      execFile("codex", ["logout"], { timeout: 5_000 }, (err, stdout, stderr) => {
+      execFile("codex", ["logout"], { timeout: 5_000, shell: process.platform === "win32" }, (err, stdout, stderr) => {
         if (err) {
           res.status(500).json({ ok: false, error: String(err.message ?? err), stderr: String(stderr).slice(0, 300) });
           return;

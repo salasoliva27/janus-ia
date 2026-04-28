@@ -3,9 +3,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import type { ServerMessage } from "./types.js";
+import { workspaceStateSlug } from "./path-utils.js";
 
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || "/workspaces/janus-ia";
-const ENGINE_PROJECT_DIR = WORKSPACE_ROOT.replace(/\//g, "-");
+const ENGINE_PROJECT_DIR = workspaceStateSlug(WORKSPACE_ROOT);
 
 const VAULT_PATHS = [
   path.join(WORKSPACE_ROOT, "concepts/**/*.md"),

@@ -4,6 +4,8 @@
 
 import { execFileSync } from "node:child_process";
 
+const IS_WIN = process.platform === "win32";
+
 export interface AgentStartSpec {
   prompt: string;
   continueId: string | null;
@@ -183,7 +185,7 @@ function isCliOnPath(cli: string): boolean {
   if (cached && now - cached.checkedAt < CLI_CHECK_TTL_MS) return cached.present;
   let present = false;
   try {
-    execFileSync("which", [cli], { stdio: "ignore" });
+    execFileSync(IS_WIN ? "where" : "which", [cli], { stdio: "ignore", shell: IS_WIN });
     present = true;
   } catch {
     present = false;
@@ -202,6 +204,7 @@ function isCodexLoggedIn(): boolean {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 3_000,
+      shell: IS_WIN,
     });
     return /logged\s*in/i.test(out) && !/not\s*logged\s*in/i.test(out);
   } catch {

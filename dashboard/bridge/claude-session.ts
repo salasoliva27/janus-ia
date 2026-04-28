@@ -5,9 +5,10 @@ import os from "node:os";
 import type { WebSocket } from "ws";
 import type { ServerMessage } from "./types.js";
 import { getAgent } from "./agent-registry.js";
+import { workspaceStateSlug } from "./path-utils.js";
 
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || "/workspaces/janus-ia";
-const ENGINE_PROJECT_DIR = WORKSPACE_ROOT.replace(/\//g, "-");
+const ENGINE_PROJECT_DIR = workspaceStateSlug(WORKSPACE_ROOT);
 const JANUS_STATE_DIR = path.join(os.homedir(), ".janus", "projects", ENGINE_PROJECT_DIR);
 const LEGACY_CLAUDE_STATE_DIR = path.join(os.homedir(), ".claude", "projects", ENGINE_PROJECT_DIR);
 const SESSIONS_DIR = path.join(JANUS_STATE_DIR, "dashboard-sessions");
@@ -286,6 +287,7 @@ export class ClaudeSession {
       cwd: safeCwd,
       stdio: ["ignore", "pipe", "pipe"],
       env: childEnv,
+      shell: process.platform === "win32",
     });
 
     this.process = proc;
