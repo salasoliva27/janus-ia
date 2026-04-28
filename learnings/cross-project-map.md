@@ -16,7 +16,7 @@ Updated at end of every session when new connections are found.
 | Resource | Projects | Notes |
 |---|---|---|
 | Supabase (rycybujjedtofghigyxm) | [[wiki/espacio-bosques]] [[wiki/nutria]] [[wiki/jp-ai]] | eb_, nutria_, ozum_ prefixes. [[concepts/rls-by-default]] enforced. See [[learnings/supabase-registry]] for full table inventory |
-| Memory MCP (Supabase `janus_memories` + `memories`) | ALL | Custom server at `mcp-servers/memory/`. `npm install` required per Codespace (node_modules not committed). FIXED 2026-04-16 |
+| Memory MCP (Supabase `memories`) | ALL | Custom server at `mcp-servers/memory/`. `npm install` required per Codespace (node_modules not committed). The legacy `janus_memories` table was renamed to `_archive_janus_memories_2026_04_28` on 2026-04-28 — only one live table now. |
 | Anthropic API | ALL | claude-sonnet-4-6 standard. mercado-bot uses claude-sonnet-4-20250514 for PREDICT step |
 | Cloudflare R2 | [[wiki/lool-ai]] [[wiki/longevite]] | janus-media bucket |
 | Google OAuth | [[wiki/espacio-bosques]] [[wiki/nutria]] | same Supabase provider |

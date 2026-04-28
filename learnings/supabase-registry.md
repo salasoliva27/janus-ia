@@ -23,9 +23,7 @@ Per [[CLAUDE]] §SUPABASE, read this file before writing any Supabase query in a
 | Table | Purpose | Key columns |
 |---|---|---|
 | `memories` | **Primary memory table** — every MCP call (`recall`, `remember`, `list_memories`, `capture_*`) reads and writes here. Also what `preflight.sh` and `session-stop-gate.sh` query. | `id`, `workspace`, `project`, `type`, `content`, `metadata` (includes `tags`), `embedding` (vector), `created_at` |
-| `janus_memories` | **Archival** — 21 rows from 2026-04-08 era (pre-rename, pre-MCP-rewrite). **No code reads or writes this table.** Retained for historical reference. Do not query. | Older/legacy shape |
-
-**Clarification (2026-04-20):** Earlier versions of this registry had the roles inverted. Verified via `mcp-servers/memory/index.js` — every `.from()` call uses `'memories'`. The `janus_memories` name reflects a pre-rename design; it was superseded but never dropped.
+| `_archive_janus_memories_2026_04_28` | Inert archive of 21 rows from the pre-rename era. Renamed 2026-04-28 from `janus_memories` so it can never be confused for the live table again. Do not query, do not migrate. Will be dropped after a few months if nothing references it. | Older/legacy shape |
 
 **Schema file:** `janus-ia/mcp-servers/memory/schema.sql`
 **MCP server:** `janus-ia/mcp-servers/memory/` (custom Node server, registered in `.mcp.json`)
@@ -73,7 +71,7 @@ Per [[CLAUDE]] §SUPABASE, read this file before writing any Supabase query in a
 
 | Table | Purpose | Notes |
 |---|---|---|
-| `ozum_memories` | Collective memory for Ozum team (same shape as `janus_memories` but Ozum-scoped) | ⬜ Not yet created. Schema should clone `janus_memories` |
+| `ozum_memories` | Collective memory for Ozum team (same shape as `memories` but Ozum-scoped) | ⬜ Not yet created. Clone the `memories` schema from `janus-ia/mcp-servers/memory/schema.sql`. |
 | `ozum_crm_leads` | CRM Phase 1 — lead intake | ⬜ Not yet designed. Revenue-critical for Ozum |
 | `ozum_crm_deals` | CRM Phase 1 — deal pipeline | ⬜ Not yet designed |
 
