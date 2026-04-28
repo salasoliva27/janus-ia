@@ -14,6 +14,7 @@ export type ServerMessage =
   | { type: "tool_event"; toolName: string; input: unknown; sessionId: string; timestamp: number }
   | { type: "fs_event"; event: string; path: string; timestamp: number }
   | { type: "learning_update"; learning: { id: string; rule: string; content: string; domain: string; project: string; timestamp: number; sourceMemoryIds: string[]; status: string } }
+  | { type: "project_update"; projectId: string; updates: { projectId: string; lastCommit?: { hash: string; message: string; age: string }; memoryCount?: number; currentPhase?: string; nextActions?: string[] } }
   | { type: "error"; message: string; sessionId?: string }
   | { type: "session_end"; cost?: number; usage?: unknown; sessionId?: string }
   | { type: "session_start"; auth: string; sessionId?: string }

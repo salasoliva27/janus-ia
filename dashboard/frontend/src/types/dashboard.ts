@@ -17,6 +17,7 @@ export interface Project {
   nextActions: string[];
   color: string;
   repo?: string;
+  memoryCount?: number;
 }
 
 export interface AgentDispatch {

@@ -41,7 +41,7 @@ function ReloadBanner() {
 }
 
 function DashboardInner() {
-  const { status, lastMessage, send } = useWebSocket();
+  const { status, lastMessage, send, onMessage } = useWebSocket();
   const handleBridgeMessage = useBridgeHandler();
   const registerWsSend = useRegisterWsSend();
   const { onConnectionLost, onConnectionRestored } = useConnectionStateSync();
@@ -51,12 +51,12 @@ function DashboardInner() {
 
   useThemeInit();
 
-  // Route real WebSocket messages to the store
+  // Route every WebSocket message synchronously into the store.
+  // Cannot rely on the `lastMessage` state value here — same-tick bursts
+  // collapse into a single render (only the last message survives).
   useEffect(() => {
-    if (lastMessage) {
-      handleBridgeMessage(lastMessage as ServerMessage);
-    }
-  }, [lastMessage, handleBridgeMessage]);
+    onMessage(handleBridgeMessage);
+  }, [onMessage, handleBridgeMessage]);
 
   // Register WebSocket send function with store when connected
   useEffect(() => {

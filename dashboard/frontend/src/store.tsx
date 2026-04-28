@@ -793,6 +793,30 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         break;
       }
 
+      case 'project_update': {
+        // Live project state from bridge — merge partial updates into existing
+        // PROJECTS rather than replace, so the static seed fields (name, stack,
+        // colour, repo, legalFlags) survive while live fields refresh.
+        const u = (msg as any).updates;
+        const pid = (msg as any).projectId;
+        if (pid && u) {
+          setState(s => ({
+            ...s,
+            projects: s.projects.map(p => {
+              if (p.id !== pid) return p;
+              return {
+                ...p,
+                ...(u.lastCommit ? { lastCommit: u.lastCommit } : {}),
+                ...(u.currentPhase ? { currentPhase: u.currentPhase } : {}),
+                ...(u.nextActions ? { nextActions: u.nextActions } : {}),
+                ...(typeof u.memoryCount === 'number' ? { memoryCount: u.memoryCount } : {}),
+              };
+            }),
+          }));
+        }
+        break;
+      }
+
       case 'session_start': {
         const sid = (msg as any).sessionId || DEFAULT_SESSION;
         setState(s => {

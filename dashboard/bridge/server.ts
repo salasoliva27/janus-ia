@@ -7,6 +7,12 @@ import { SessionManager } from "./session-manager.js";
 import { PermissionManager } from "./permissions.js";
 import { listAgentAvailability } from "./agent-registry.js";
 import { startWatchers, stopWatchers, broadcastInitialLearnings } from "./file-watcher.js";
+import {
+  broadcastInitialProjectStates,
+  startProjectStateRefresh,
+  refreshOneProject,
+  wikiSlugFromPath,
+} from "./project-state.js";
 import type { FSWatcher } from "chokidar";
 import fs from "node:fs";
 import path from "node:path";
@@ -1506,6 +1512,14 @@ Do not include anything except the JSON object.`;
       }
     });
 
+    // Send live project state — bridge cached the latest broadcast at boot,
+    // but newly-connected clients missed it. Re-fetch + send to this client.
+    broadcastInitialProjectStates((msg) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(msg));
+      }
+    }).catch(() => {});
+
     // Re-target existing sessions at the new WS and flush any queued output.
     sessionManager.attachWs(ws);
 
@@ -1619,6 +1633,8 @@ Do not include anything except the JSON object.`;
   function shutdown() {
     console.log("\n[bridge] shutting down...");
     stopWatchers(watchers).catch(() => {});
+    const t = (server as unknown as { _projectRefresh?: NodeJS.Timeout })._projectRefresh;
+    if (t) clearInterval(t);
     wss.close();
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(1), 3000);
@@ -1636,6 +1652,24 @@ Do not include anything except the JSON object.`;
       watchers = startWatchers(broadcast);
       broadcastInitialLearnings(broadcast);
       ensureHookConfig(port);
+
+      // Live project cards: initial fetch + 5-min refresh + per-wiki-change.
+      broadcastInitialProjectStates(broadcast).catch((e) =>
+        console.error("[project-state] initial fetch failed:", e?.message ?? e),
+      );
+      const projRefresh = startProjectStateRefresh(broadcast);
+      (server as unknown as { _projectRefresh?: NodeJS.Timeout })._projectRefresh = projRefresh;
+
+      // Hook the existing vault watcher: when a wiki/<project>.md changes,
+      // re-parse + re-broadcast just that one project (no full GitHub poll).
+      // watchers[0] is the vaultWatcher (see file-watcher.ts startWatchers).
+      if (watchers[0]) {
+        watchers[0].on("change", (filePath: string) => {
+          const slug = wikiSlugFromPath(filePath);
+          if (slug) refreshOneProject(broadcast, slug).catch(() => {});
+        });
+      }
+
       resolve(server);
     });
   });
