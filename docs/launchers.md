@@ -2,7 +2,7 @@
 
 Janus is still one dashboard. The launchers only start the existing `./dash`
 entry point with `JANUS_OPEN_BROWSER=1`, so model engines, MCP tools, and
-credentials keep flowing through the same dotfiles-backed runtime.
+credentials keep flowing through the same runtime.
 
 ## Desktop
 
@@ -21,7 +21,16 @@ That creates one of these, depending on the machine:
 - Linux: `janus-ia.desktop` on the Desktop
 
 Double-clicking it starts the bridge, builds the frontend when needed, loads
-credentials from `~/.env`, and opens `http://localhost:3100`.
+credentials from local `.env` files, and opens `http://localhost:3100`.
+
+Credential load order:
+
+1. `<workspace>/.env` — created by the dashboard for forks/shared installs.
+2. `~/.env` — private dotfiles mirror; loaded last, so it wins if both exist.
+
+If neither file exists, Janus still launches and the first-run setup asks that
+machine's user to sign in or paste their own provider keys. Secrets are not
+stored in git-tracked files.
 
 On every launch, Janus checks Git for a safe fast-forward update before it
 starts. If the repo has local tracked edits, it skips the update and continues
@@ -32,6 +41,17 @@ creates a launcher inside Codespaces, not on your laptop.
 
 For first-time laptop setup with the private dotfiles repo, follow
 `docs/laptop-setup.md` before using the launcher.
+
+## Sharing
+
+For an always-updated install, share the Git repo URL and have the other person
+clone it. A raw zip is only a snapshot unless it includes `.git`, and it still
+cannot pull or push unless that machine has GitHub access to the repo.
+
+Do not include `.env`, `~/.codex`, `~/.claude`, browser profiles, or your
+private dotfiles repo in any shared package. The launcher installs runtime
+dependencies such as Node, npm packages, and provider CLIs on the receiving
+machine; it does not carry your API keys or OAuth sessions.
 
 ## Samsung Phone
 

@@ -6,7 +6,10 @@
 
 ## HOW THIS WORKS
 
-All secrets live in Jano's private dotfiles repo (`salasoliva27/dotfiles`), loaded as environment variables into every Codespace automatically.
+Private Janus secrets live in Jano's private dotfiles repo
+(`salasoliva27/dotfiles`) and are exposed locally through `~/.env`.
+Forked/shared installs do not get those values; the dashboard saves that
+user's own credentials into a local gitignored `<repo>/.env`.
 
 **Never store secrets in any project repo.** Never ask Jano for a key in a conversation.
 

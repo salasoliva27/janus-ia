@@ -7,8 +7,12 @@ The important contract is:
 
 - Janus IA lives anywhere you clone it.
 - Dotfiles live anywhere you clone them.
-- Janus reads credentials from `~/.env`.
-- Therefore, `~/.env` must point at or copy from `dotfiles/.env`.
+- Private Janus reads credentials from `~/.env`, copied or linked from the
+  private `dotfiles/.env`.
+- Shared/forked Janus installs can run without dotfiles. The UI writes that
+  user's credentials to `<repo>/.env`, which is gitignored and local only.
+- On launch, `<repo>/.env` loads first and `~/.env` loads second, so private
+  dotfiles win when both exist.
 
 ## Windows
 
@@ -113,6 +117,26 @@ grep -q OPENAI_API_KEY ~/.env && echo "OpenAI key present"
 
 Open `http://localhost:3100`. The top bar should let you switch engines and
 models. The tools read the same credentials through `~/.env`.
+
+## Shared / Forked Install Without Dotfiles
+
+For someone who should not have access to Jano's private credentials, do not
+clone `salasoliva27/dotfiles` and do not copy any `.env` from another machine.
+They should clone the Janus repo, launch it, and complete the first-run
+credentials flow with their own provider accounts or API keys.
+
+Windows example:
+
+```bash
+mkdir -p ~/code
+cd ~/code
+git clone https://github.com/salasoliva27/janus-ia.git
+cd janus-ia
+cmd.exe //c "Janus IA.cmd"
+```
+
+When they save credentials in the UI, Janus writes them to `janus-ia/.env`.
+That file is gitignored and stays on their laptop.
 
 ## Notes
 

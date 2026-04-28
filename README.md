@@ -42,6 +42,10 @@ projects, outputs).
 5. **First turn, tell the AI**: `run discovery`. It will walk you through naming
    your projects, declaring your stack, and personalizing the agents.
 
+Credentials are deliberately outside this repo. Private installs can mirror
+`dotfiles/.env` into `~/.env`; shared or forked installs use the first-run UI to
+save that user's own credentials into a local gitignored `.env`.
+
 What you keep from the fork: the dispatch protocol, all 16 agents, the
 inline-learning + vault-plasticity rules, the cross-synthesis checklist, the
 MCP/skills/tools registries (with verdicts), and the dashboard.

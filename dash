@@ -3,16 +3,6 @@
 # Usage: ./dash
 set -e
 
-# Always load dotfiles env so the bridge has every API key (OPENAI_API_KEY,
-# GOOGLE_REFRESH_TOKEN, SNOWFLAKE_*, etc.) regardless of how this script was
-# invoked. Interactive shells already do this via .bashrc, but backgrounded /
-# detached / hook-invoked starts don't inherit it. Idempotent.
-if [ -f "$HOME/.env" ]; then
-  set -a
-  . "$HOME/.env"
-  set +a
-fi
-
 # Two-mode launcher:
 #   1) Run from janus-ia directly: ./dash            → WORKSPACE_ROOT=/workspaces/janus-ia
 #   2) Run from a wrapper in another repo: the wrapper sets JANUS_DASH_HOME to
@@ -36,6 +26,32 @@ OPEN_BROWSER="${JANUS_OPEN_BROWSER:-0}"
 if [ "${1:-}" = "--open" ]; then
   OPEN_BROWSER=1
   shift
+fi
+
+ENV_FILES_LOADED=0
+load_env_file() {
+  local file="$1" label="$2"
+  [ -f "$file" ] || return 0
+  set -a
+  # shellcheck disable=SC1090
+  . "$file"
+  set +a
+  ENV_FILES_LOADED=1
+  echo "• loaded credentials from $label"
+}
+
+# Load credentials from two safe local sources:
+#   1) <workspace>/.env — created by the dashboard for forks/shared installs.
+#   2) ~/.env           — your private dotfiles mirror; loaded last so it wins.
+#
+# Secrets are never read from git-tracked files. If neither file exists, the UI
+# first-run flow asks the user to sign in or paste their own provider keys.
+load_env_file "$WORKSPACE_ROOT/.env" "workspace .env"
+if [ "$HOME/.env" != "$WORKSPACE_ROOT/.env" ]; then
+  load_env_file "$HOME/.env" "home .env"
+fi
+if [ "$ENV_FILES_LOADED" != "1" ]; then
+  echo "• no .env found — first-run setup will ask for this user's own credentials"
 fi
 
 auto_update_repo() {
