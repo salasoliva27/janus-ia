@@ -6,6 +6,8 @@ dashboard/dist/
 .playwright-mcp/
 outputs/screenshots/
 *.png
+!dashboard/frontend/public/themes/*.png
+!dashboard/frontend/dist/themes/*.png
 # Obsidian personal state (do not commit — machine-specific)
 .obsidian/workspace.json
 .obsidian/workspace-mobile.json

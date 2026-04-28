@@ -238,7 +238,7 @@ fi
 # Rebuild frontend only if sources are newer than the built bundle
 NEEDS_BUILD=1
 if [ -d "frontend/dist/assets" ]; then
-  newest_src=$(find frontend/src frontend/index.html -type f -newer frontend/dist/index.html 2>/dev/null | head -1)
+  newest_src=$(find frontend/src frontend/public frontend/index.html -type f -newer frontend/dist/index.html 2>/dev/null | head -1)
   [ -z "$newest_src" ] && NEEDS_BUILD=0
 fi
 if [ "$NEEDS_BUILD" = "1" ]; then
