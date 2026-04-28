@@ -41,6 +41,28 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /workspaces/janus-ia/scripts/correction-flag-guard.sh",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /workspaces/janus-ia/scripts/correction-flag-clear.sh",
+            "timeout": 3
+          }
+        ]
+      }
     ]
   }
 }

@@ -105,6 +105,35 @@ EOF
     exit 0
   fi
 
+  # ─── Session-summary check ────────────────────────────────
+  # Audit 2026-04-28 recommendation #9: capture_session_summary was called
+  # in 1 of 2 sessions (50%). Make it mandatory at the same gate that
+  # already enforces anchor + memory volume. The summary is the single
+  # cross-session learning artifact — losing it loses the session.
+  SUMMARY_RESP=$(curl -s -m 5 \
+    "${SUPABASE_URL}/rest/v1/memories?select=id&type=eq.session&metadata=cs.%7B%22tags%22:%5B%22session-summary%22%5D%7D&created_at=gte.${TODAY}&workspace=eq.$WORKSPACE_NAME&limit=1" \
+    -H "apikey: ${SUPABASE_KEY}" \
+    -H "Authorization: Bearer ${SUPABASE_KEY}" 2>/dev/null || echo "[]")
+
+  HAS_SUMMARY=$(echo "$SUMMARY_RESP" | python3 -c "
+import json, sys
+try:
+    data = json.loads(sys.stdin.read())
+    print('True' if isinstance(data, list) and len(data) > 0 else 'False')
+except:
+    print('False')
+" 2>/dev/null)
+
+  if [ "$HAS_SUMMARY" != "True" ]; then
+    cat <<'EOF'
+{
+  "decision": "block",
+  "reason": "STOP-GATE: No session-summary memory exists for today. Anchor + memory count are satisfied, but the cross-session summary is missing. Before ending, call `mcp__memory__capture_session_summary` (it tags the memory with `session-summary` automatically), OR call `mcp__memory__remember` with type='session' and tags including 'session-summary' explicitly. Audit 2026-04-28: previously only fired in 50% of sessions. Mandatory now."
+}
+EOF
+    exit 0
+  fi
+
   exit 0
 fi
 

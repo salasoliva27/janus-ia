@@ -134,26 +134,15 @@ LEARNING_COUNT=$(find "$WORKSPACE/learnings" -name "*.md" 2>/dev/null | wc -l)
 AGENT_COUNT=$(find "$WORKSPACE/agents" -name "*.md" 2>/dev/null | wc -l)
 echo "  Concepts: ${CONCEPT_COUNT} | Learnings: ${LEARNING_COUNT} | Agents: ${AGENT_COUNT}"
 
-# ─── Skill integrity check ─────────────────────────────────────
-# Three skill sources:
-#   /mnt/skills/public/*           BUILT-IN  (always available, ephemeral-proof)
-#   ~/.claude/plugins/marketplaces  PLUGINS   (installed via /plugin)
-#   ~/.claude/skills/*             USER-INSTALLED (npx skills add ...)
-# Only USER-INSTALLED skills are vulnerable to Codespace recycling.
-mkdir -p "$HOME/.claude/skills" 2>/dev/null || true
-BUILTIN_COUNT=$( { find /mnt/skills/public -maxdepth 1 -mindepth 1 -type d 2>/dev/null || true; } | wc -l)
-USER_COUNT=$( { find "$HOME/.claude/skills" -maxdepth 1 -mindepth 1 -type d 2>/dev/null || true; } | wc -l)
-PLUGIN_COUNT=$( { find "$HOME/.claude/plugins/marketplaces" -maxdepth 3 -mindepth 1 -type d -name "skills" 2>/dev/null || true; } | wc -l)
-echo "  Skills: ${BUILTIN_COUNT} built-in · ${USER_COUNT} user-installed · ${PLUGIN_COUNT} plugin"
-
-# If the registry asks for user-installed skills but ~/.claude/skills/ is empty,
-# attempt auto-install from a manifest (skills/auto-install.sh). Codespace
-# ephemerality is the single biggest source of skill drift.
-if [ -x "$WORKSPACE/scripts/install-skills.sh" ] && [ "${USER_COUNT:-0}" -eq 0 ]; then
-  EXPECTED=$(grep -c "^# user-install:" "$WORKSPACE/scripts/install-skills.sh" 2>/dev/null || echo 0)
-  if [ "${EXPECTED:-0}" -gt 0 ]; then
-    echo "  → ${EXPECTED} user-skill(s) expected but missing. Run: bash scripts/install-skills.sh"
-  fi
+# ─── Skills self-reconcile ─────────────────────────────────────
+# Source-of-truth: reconcile-skills.sh inspects disk and rewrites the
+# auto block in skills/registry.md. The registry can no longer lie.
+# Audit 2026-04-28: previous reminder-only check let the registry
+# claim 5+ skills "installed" while ~/.claude/skills/ was empty.
+if [ -x "$WORKSPACE/scripts/reconcile-skills.sh" ]; then
+  bash "$WORKSPACE/scripts/reconcile-skills.sh" 2>/dev/null || echo "  Skills: ✗ reconciler failed"
+else
+  echo "  Skills: (reconciler missing — registry may not reflect disk truth)"
 fi
 
 # Check PROJECTS.md exists and has content
@@ -214,11 +203,22 @@ fi
 echo ""
 
 # ─── 5. PROTOCOL REMINDER ─────────────────────────────────────
+# ─── Subagent dispatch visibility (audit 2026-04-28 recommendation) ──
+# Surface 7d Agent invocation count so dispatch drift is visible at session
+# start. Non-blocking — the dispatch-reminder hook does the routing prompt.
+DISPATCH_COUNT=0
+PROJECTS_DIR="$HOME/.claude/projects/$CLAUDE_PROJECT_DIR"
+if [ -d "$PROJECTS_DIR" ]; then
+  DISPATCH_COUNT=$(find "$PROJECTS_DIR" -name '*.jsonl' -newermt '7 days ago' 2>/dev/null \
+    | xargs -r grep -h '"type":"tool_use"' 2>/dev/null \
+    | grep -c '"name":"Agent"' || echo 0)
+fi
+
 echo "▸ SESSION PROTOCOL CHECKLIST"
 echo "  ✓ Permission mode: Full Auto (default)"
 echo "  ✓ Most-recent-context — auto-injected below"
 echo "  ✓ Recent corrections — auto-injected below"
-echo "  □ Cross-synthesis: legal, market, tech, capacity"
+echo "  ▸ Subagent dispatches (last 7d): ${DISPATCH_COUNT}"
 echo "  □ Monitor own context usage — snapshot at ~70%, hard-stop at ~80%"
 echo "  □ Respond to user"
 echo ""
