@@ -364,7 +364,17 @@ export class ClaudeSession {
     // Persist immediately so a crash mid-turn doesn't lose the user's message
     persistSession(this.sessionId, this.engineSessionId, this.conversationLog, prompt, this.agentId, this.modelId);
 
-    const proc = spawn(spawnSpec.cli, spawnSpec.args, {
+    // Windows + shell:true is required to resolve .cmd / .ps1 npm shims on
+    // PATH, but Node's spawn does NOT escape args under shell:true (see
+    // DEP0190). cmd.exe then word-splits any unquoted whitespace, so a prompt
+    // like "Reply with exactly OK" reaches the CLI as five separate args.
+    // Claude tolerates extra positionals; Codex strict-parses and errors with
+    // `unexpected argument 'with' found`. Pre-quote per-arg here so the shell
+    // sees one token per array entry.
+    const winArgs = process.platform === "win32"
+      ? spawnSpec.args.map((a) => /[\s"&|<>^()%!]/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a)
+      : spawnSpec.args;
+    const proc = spawn(spawnSpec.cli, winArgs, {
       cwd: safeCwd,
       stdio: ["ignore", "pipe", "pipe"],
       env: childEnv,
