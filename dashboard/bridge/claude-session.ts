@@ -4,7 +4,7 @@ import path from "node:path";
 import os from "node:os";
 import type { WebSocket } from "ws";
 import type { ServerMessage } from "./types.js";
-import { getAgent, getAgentAvailability } from "./agent-registry.js";
+import { getAgent, getAgentAvailability, listAgentAvailability, markAgentAuthFailure } from "./agent-registry.js";
 import { workspaceStateSlug } from "./path-utils.js";
 
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || "/workspaces/janus-ia";
@@ -13,6 +13,15 @@ const JANUS_STATE_DIR = path.join(os.homedir(), ".janus", "projects", ENGINE_PRO
 const LEGACY_CLAUDE_STATE_DIR = path.join(os.homedir(), ".claude", "projects", ENGINE_PROJECT_DIR);
 const SESSIONS_DIR = path.join(JANUS_STATE_DIR, "dashboard-sessions");
 const LEGACY_SESSIONS_DIR = path.join(LEGACY_CLAUDE_STATE_DIR, "dashboard-sessions");
+
+const PROJECT_STATUS_FILES = [
+  { id: "espacio-bosques", file: "wiki/espacio-bosques.md" },
+  { id: "lool-ai", file: "wiki/lool-ai.md" },
+  { id: "nutria", file: "wiki/nutria.md" },
+  { id: "longevite", file: "wiki/longevite.md" },
+  { id: "freelance-system", file: "wiki/freelance-system.md" },
+  { id: "jp-ai", file: "wiki/jp-ai.md" },
+];
 
 type PersistedSession = {
   sessionId?: string;
@@ -29,6 +38,49 @@ type PersistedSession = {
 
 function isValidCwd(cwd: string): boolean {
   return cwd.startsWith(WORKSPACE_ROOT);
+}
+
+function asksForProjectStatus(prompt: string): boolean {
+  const p = prompt.toLowerCase();
+  const mentionsProjects = /\b(projects?|portfolio|ventures?|janus)\b/.test(p);
+  const asksStatus = /\b(status|state|progress|next|priority|priorities|where\s+(things|we|they)\s+stand|what'?s\s+going\s+on)\b/.test(p);
+  return mentionsProjects && asksStatus;
+}
+
+function extractWikiStatus(raw: string): { status: string | null; nextActions: string[] } {
+  const status = raw.match(/##\s+Status\s*\n+([^\n]+)/)?.[1]?.trim() ?? null;
+  const nextActions = raw
+    .split("\n")
+    .filter((line) => /^\s*[-*]\s*⬜/.test(line))
+    .map((line) => line.replace(/^\s*[-*]\s*⬜\s*/, "").trim())
+    .filter(Boolean)
+    .slice(0, 3);
+  return { status, nextActions };
+}
+
+function buildProjectStatusContext(): string | null {
+  const lines: string[] = [];
+  for (const project of PROJECT_STATUS_FILES) {
+    const file = path.join(WORKSPACE_ROOT, project.file);
+    if (!fs.existsSync(file)) continue;
+    const { status, nextActions } = extractWikiStatus(fs.readFileSync(file, "utf-8"));
+    if (!status && nextActions.length === 0) continue;
+    lines.push(`- ${project.id}: ${status ?? "status not recorded"}`);
+    if (nextActions.length > 0) lines.push(`  Next: ${nextActions.join("; ")}`);
+  }
+  if (lines.length === 0) return null;
+  return [
+    "[Janus project status context]",
+    "The user is asking about current project status. Answer directly from this context, and use PROJECTS.md/wiki files for more detail if needed. Do not answer with a generic readiness acknowledgement.",
+    ...lines,
+    "[End Janus project status context]",
+  ].join("\n");
+}
+
+function enrichProjectStatusPrompt(prompt: string): string {
+  if (!asksForProjectStatus(prompt)) return prompt;
+  const context = buildProjectStatusContext();
+  return context ? `${context}\n\n${prompt}` : prompt;
 }
 
 function sessionFile(sessionId: string): string {
@@ -243,10 +295,10 @@ export class ClaudeSession {
     this.close();
 
     // If this is a forked session, prepend parent context
-    let fullPrompt = prompt;
+    let fullPrompt = enrichProjectStatusPrompt(prompt);
     if (this.forkContext && this.forkContext.length > 0) {
       const contextBlock = this.forkContext.join("\n");
-      fullPrompt = `[Previous conversation context — you are continuing from a forked branch]\n${contextBlock}\n[End of context. Continue from here.]\n\n${prompt}`;
+      fullPrompt = `[Previous conversation context — you are continuing from a forked branch]\n${contextBlock}\n[End of context. Continue from here.]\n\n${fullPrompt}`;
       this.forkContext = null; // Only use once
     }
     fullPrompt = this.buildEngineHandoff(fullPrompt);
@@ -254,6 +306,18 @@ export class ClaudeSession {
     const adapter = getAgent(this.agentId);
     const availability = getAgentAvailability(this.agentId);
     if (!availability.available) {
+      const fallback = listAgentAvailability().find(a => a.available && a.id !== this.agentId);
+      if (fallback) {
+        const reason = (availability.reason || "auth check failed").replace(/\.+\s*$/, "");
+        this.send({
+          type: "error",
+          message: `${adapter.label} is unavailable: ${reason}. Switching to ${fallback.label}.`,
+          sessionId: this.sessionId,
+        });
+        this.setAgent(fallback.id);
+        await this.start(prompt, cwd);
+        return;
+      }
       this.send({
         type: "error",
         message: availability.reason || `${adapter.label} is not available on this machine.`,
@@ -284,6 +348,7 @@ export class ClaudeSession {
     // env key. Codex can also use `codex login`, so env absence is not fatal.
     if (adapter.envVarRequired && adapter.id !== "codex" && !childEnv[adapter.envVarRequired]) {
       this.send({ type: "error", message: `${adapter.label} requires ${adapter.envVarRequired} — open the Key Vault to add it.`, sessionId: this.sessionId });
+      this.send({ type: "session_end", cost: undefined, usage: undefined, sessionId: this.sessionId });
       return;
     }
 
@@ -361,7 +426,6 @@ export class ClaudeSession {
     let stderrErrorCount = 0;
     let stderrErrorWindowStart = 0;
     const FATAL_STDERR_PATTERNS = [
-      /HTTP\s+(4\d\d|5\d\d)/,                    // any 4xx/5xx from an upstream
       /\b401\s+Unauthorized\b/i,
       /\b403\s+Forbidden\b/i,
       /authentication.*(failed|required)/i,
@@ -376,6 +440,12 @@ export class ClaudeSession {
       const text = chunk.toString().trim();
       if (!text) return;
       console.log(`[session:${this.sessionId}:stderr]`, text);
+      const isKnownBenign = [
+        /Reading additional input from stdin/i,
+        /Shell snapshot validation failed/i,
+        /rmcp::transport::streamable_http_client: fail to delete session/i,
+      ].some(re => re.test(text));
+      if (isKnownBenign) return;
       const isFatal = FATAL_STDERR_PATTERNS.some(re => re.test(text));
       if (!isFatal) return; // informational log — don't promote to chat error
 
@@ -451,6 +521,7 @@ export class ClaudeSession {
       console.error(`[session:${this.sessionId}] spawn error:`, err.message);
       this.clearTimeout();
       this.send({ type: "error", message: err.message, sessionId: this.sessionId });
+      this.send({ type: "session_end", cost: undefined, usage: undefined, sessionId: this.sessionId });
       this.process = null;
     });
   }
@@ -510,9 +581,26 @@ export class ClaudeSession {
         return text || null;
       }
 
+      case "content_block_delta": {
+        const text = event.delta?.type === "text_delta" && typeof event.delta.text === "string"
+          ? event.delta.text
+          : null;
+        if (text) this.send({ type: "claude_message", message: text, sessionId: this.sessionId });
+        return text;
+      }
+
       case "result": {
         if (event.session_id) {
           this.engineSessionId = event.session_id;
+        }
+        if (event.is_error && (
+          event.api_error_status === 401 ||
+          event.error === "authentication_failed" ||
+          /authentication/i.test(String(event.result || ""))
+        )) {
+          const reason = `${getAgent(this.agentId).label} authentication failed. Reconnect this engine in the CLI or use another available engine.`;
+          markAgentAuthFailure(this.agentId, reason);
+          this.send({ type: "error", message: reason, sessionId: this.sessionId });
         }
         return null;
       }
