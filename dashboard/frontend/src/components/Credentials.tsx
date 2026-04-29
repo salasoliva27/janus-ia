@@ -295,7 +295,11 @@ function SubscriptionPanel({ endpoint, title, subscriptionAuthMethod, idleHint, 
     if (phase !== 'awaiting') return;
     const t = window.setInterval(async () => {
       const d = await refresh();
-      if (d?.loggedIn && d.authMethod === subscriptionAuthMethod && !d.accessTokenExpired && !d.reauthRequired) {
+      // Exit awaiting as soon as claude auth status confirms the OAuth token is
+      // valid. Don't gate on reauthRequired — the subscription probe can briefly
+      // 401 right after a fresh OAuth callback before the API accepts the new
+      // token. The idle state handles the reauthRequired warning separately.
+      if (d?.loggedIn && d.authMethod === subscriptionAuthMethod && !d.accessTokenExpired) {
         setPhase('idle');
         setUrl(null);
         notifyCredentialsChanged();
