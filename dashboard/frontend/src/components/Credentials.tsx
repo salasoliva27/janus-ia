@@ -319,7 +319,7 @@ function SubscriptionPanel({ endpoint, title, subscriptionAuthMethod, idleHint, 
       }
       setUrl(d.url || null);
       setPhase('awaiting');
-      if (d.url) window.open(d.url, '_blank', 'noopener');
+      if (d.url && endpoint !== 'claude-auth') window.open(d.url, '_blank', 'noopener');
     } catch (e) {
       setPhase('error');
       setErrMsg(String(e));
@@ -347,16 +347,9 @@ function SubscriptionPanel({ endpoint, title, subscriptionAuthMethod, idleHint, 
       <div className="credentials__sub-panel-head">
         <span className="credentials__sub-panel-title">{title}</span>
         {subActive ? (
-          <>
-            {!loginUnavailableReason && (
-              <button className="credentials__save-btn" onClick={() => startLogin(true)} disabled={loginDisabled}>
-                {phase === 'starting' ? 'starting…' : phase === 'awaiting' ? 'waiting for browser…' : 'reconnect'}
-              </button>
-            )}
-            <button className="credentials__test-btn credentials__test-btn--pass" onClick={signOut}>
-              sign out
-            </button>
-          </>
+          <button className="credentials__test-btn credentials__test-btn--pass" onClick={signOut}>
+            sign out
+          </button>
         ) : subscriptionExpired ? (
           <>
             {!loginUnavailableReason && (
