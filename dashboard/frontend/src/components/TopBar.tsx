@@ -153,9 +153,9 @@ function AgentPicker({ onCredentials }: { onCredentials?: () => void }) {
 
   useEffect(() => {
     let cancelled = false;
-    async function load() {
+    async function load(force = false) {
       try {
-        const r = await fetch('/api/agents');
+        const r = await fetch(`/api/agents${force ? '?refresh=1' : ''}`);
         const j = await r.json();
         if (!cancelled && Array.isArray(j.agents)) {
           setAgents(j.agents);
@@ -172,7 +172,15 @@ function AgentPicker({ onCredentials }: { onCredentials?: () => void }) {
     }
     load();
     const i = setInterval(load, 15_000);
-    return () => { cancelled = true; clearInterval(i); };
+    function onCredentialsChanged() {
+      void load(true);
+    }
+    window.addEventListener('venture-os:credentials-changed', onCredentialsChanged);
+    return () => {
+      cancelled = true;
+      clearInterval(i);
+      window.removeEventListener('venture-os:credentials-changed', onCredentialsChanged);
+    };
   }, []);
 
   useEffect(() => {
@@ -215,7 +223,7 @@ function AgentPicker({ onCredentials }: { onCredentials?: () => void }) {
               key={a.id}
               className={`agent-picker__item ${a.id === active ? 'agent-picker__item--active' : ''} ${!a.available ? 'agent-picker__item--disabled' : ''}`}
               onClick={() => a.available && pick(a.id)}
-              disabled={!a.available}
+              aria-disabled={!a.available}
             >
               <span className="agent-picker__item-dot" style={{
                 background: a.available ? 'var(--color-accent)' : 'oklch(0.65 0.2 25)',
@@ -253,16 +261,24 @@ function ModelPicker() {
 
   useEffect(() => {
     let cancelled = false;
-    async function load() {
+    async function load(force = false) {
       try {
-        const r = await fetch('/api/agents');
+        const r = await fetch(`/api/agents${force ? '?refresh=1' : ''}`);
         const j = await r.json();
         if (!cancelled && Array.isArray(j.agents)) setAgents(j.agents);
       } catch { /* bridge warming up */ }
     }
     load();
     const i = setInterval(load, 30_000);
-    return () => { cancelled = true; clearInterval(i); };
+    function onCredentialsChanged() {
+      void load(true);
+    }
+    window.addEventListener('venture-os:credentials-changed', onCredentialsChanged);
+    return () => {
+      cancelled = true;
+      clearInterval(i);
+      window.removeEventListener('venture-os:credentials-changed', onCredentialsChanged);
+    };
   }, []);
 
   // Listen for agent changes so the model dropdown swaps its list

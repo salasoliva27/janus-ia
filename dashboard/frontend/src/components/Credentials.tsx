@@ -268,11 +268,18 @@ function SubscriptionPanel({ endpoint, title, subscriptionAuthMethod, idleHint, 
   const [url, setUrl] = useState<string | null>(null);
   const [errMsg, setErrMsg] = useState<string | null>(null);
 
+  function notifyCredentialsChanged() {
+    window.dispatchEvent(new CustomEvent('venture-os:credentials-changed', { detail: { endpoint } }));
+  }
+
   const refresh = async () => {
     try {
       const r = await fetch(`/api/${endpoint}/status`);
       const d = await r.json();
       setStatus(d);
+      if (d?.loggedIn && d.authMethod === subscriptionAuthMethod && !d.accessTokenExpired) {
+        notifyCredentialsChanged();
+      }
       return d as SubscriptionAuthStatus;
     } catch {
       return null;
@@ -289,6 +296,7 @@ function SubscriptionPanel({ endpoint, title, subscriptionAuthMethod, idleHint, 
       if (d?.loggedIn && d.authMethod === subscriptionAuthMethod && !d.accessTokenExpired) {
         setPhase('idle');
         setUrl(null);
+        notifyCredentialsChanged();
       }
     }, 2000);
     return () => window.clearInterval(t);
@@ -308,6 +316,7 @@ function SubscriptionPanel({ endpoint, title, subscriptionAuthMethod, idleHint, 
       if (d.status) setStatus(d.status);
       if (d.loggedIn) {
         if (!d.status) await refresh();
+        notifyCredentialsChanged();
         setPhase('idle');
         setUrl(null);
         return;
@@ -331,22 +340,28 @@ function SubscriptionPanel({ endpoint, title, subscriptionAuthMethod, idleHint, 
       await fetch(`/api/${endpoint}/logout`, { method: 'POST' });
     } finally {
       await refresh();
+      notifyCredentialsChanged();
       setPhase('idle');
       setUrl(null);
     }
   };
 
   const signedInSubscription = status?.loggedIn && status?.authMethod === subscriptionAuthMethod;
+  const statusLoading = status === null;
   const subActive = signedInSubscription && !status?.accessTokenExpired;
   const subscriptionExpired = signedInSubscription && status?.accessTokenExpired;
   const loginUnavailableReason = status?.oauthUnavailableReason;
-  const loginDisabled = phase === 'starting' || phase === 'awaiting' || !!loginUnavailableReason;
+  const loginDisabled = statusLoading || phase === 'starting' || phase === 'awaiting' || !!loginUnavailableReason;
 
   return (
     <div className="credentials__sub-panel">
       <div className="credentials__sub-panel-head">
         <span className="credentials__sub-panel-title">{title}</span>
-        {subActive ? (
+        {statusLoading ? (
+          <button className="credentials__save-btn" disabled>
+            checking...
+          </button>
+        ) : subActive ? (
           <button className="credentials__test-btn credentials__test-btn--pass" onClick={signOut}>
             sign out
           </button>
@@ -417,7 +432,7 @@ function SubscriptionPanel({ endpoint, title, subscriptionAuthMethod, idleHint, 
       {phase === 'error' && errMsg && (
         <div className="credentials__test-error">{errMsg}</div>
       )}
-      {!subActive && phase === 'idle' && !loginUnavailableReason && (
+      {!statusLoading && !subActive && phase === 'idle' && !loginUnavailableReason && (
         <div className="credentials__sub-panel-line credentials__sub-panel-hint">
           {idleHint}
         </div>

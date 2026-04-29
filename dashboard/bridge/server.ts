@@ -5,7 +5,7 @@ import type { ClientMessage, ServerMessage } from "./types.js";
 import { isValidClientMessage } from "./types.js";
 import { SessionManager } from "./session-manager.js";
 import { PermissionManager } from "./permissions.js";
-import { getAgent, listAgentAvailability } from "./agent-registry.js";
+import { clearAgentAuthCache, getAgent, listAgentAvailability } from "./agent-registry.js";
 import { startWatchers, stopWatchers, broadcastInitialLearnings } from "./file-watcher.js";
 import {
   broadcastInitialProjectStates,
@@ -254,7 +254,9 @@ export function startServer(port: number): Promise<http.Server> {
         }
         try {
           const parsed = JSON.parse(stdout);
-          resolveStatus(addClaudeOAuthAvailability({ ...parsed, ...readClaudeCredentialMeta(), envKeySet: !!process.env.ANTHROPIC_API_KEY }));
+          const status = addClaudeOAuthAvailability({ ...parsed, ...readClaudeCredentialMeta(), envKeySet: !!process.env.ANTHROPIC_API_KEY });
+          if (isUsableClaudeSubscription(status)) clearAgentAuthCache("claude");
+          resolveStatus(status);
         } catch {
           resolveStatus({ loggedIn: false, error: "could not parse claude output", raw: stdout.slice(0, 200) });
         }
@@ -312,6 +314,7 @@ export function startServer(port: number): Promise<http.Server> {
           // Continue into login; logout may report "not logged in" or be
           // shadowed by a broken token, and login is still the repair path.
         }
+        clearAgentAuthCache("claude");
       }
       const child = spawn("claude", ["auth", "login", "--claudeai"], {
         env: cleanEnv,
@@ -344,6 +347,7 @@ export function startServer(port: number): Promise<http.Server> {
       child.stderr?.on("data", (d) => { buf += d.toString(); tryExtractUrl(); });
       child.on("exit", async (code, signal) => {
         claudeLoginChild = null;
+        clearAgentAuthCache("claude");
         if (!resolved) {
           const status = await getClaudeAuthStatus();
           if (isUsableClaudeSubscription(status)) {
@@ -394,6 +398,7 @@ export function startServer(port: number): Promise<http.Server> {
           res.status(500).json({ ok: false, error: String(err.message ?? err), stderr: String(stderr).slice(0, 300) });
           return;
         }
+        clearAgentAuthCache("claude");
         res.json({ ok: true, output: stdout.trim() });
       });
     } catch (err) {
@@ -1487,7 +1492,8 @@ export function startServer(port: number): Promise<http.Server> {
   // ready to use. listAgentAvailability checks both env var presence and CLI
   // presence on PATH (cached 5s), so the picker can grey out adapters whose
   // binary isn't installed instead of letting a turn fail at spawn time.
-  app.get("/api/agents", (_req, res) => {
+  app.get("/api/agents", (req, res) => {
+    if (req.query.refresh === "1") clearAgentAuthCache();
     res.json({ agents: listAgentAvailability() });
   });
 
