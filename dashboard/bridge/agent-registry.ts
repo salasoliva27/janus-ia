@@ -260,45 +260,62 @@ function isClaudeProbeSuccess(text: string): boolean {
   }
 }
 
+// Whether a background probe is currently in-flight. Prevents concurrent spawns.
+let claudeProbeInFlight = false;
+
+function runClaudeProbeBackground(): void {
+  if (claudeProbeInFlight) return;
+  claudeProbeInFlight = true;
+  const cleanEnv = { ...process.env };
+  delete cleanEnv.ANTHROPIC_API_KEY;
+  execFile("claude", [
+    "-p", "Reply with exactly OK.",
+    "--model", "claude-haiku-4-5-20251001",
+    "--output-format", "json",
+    "--verbose",
+    "--no-session-persistence",
+    "--setting-sources", "user",
+    "--disable-slash-commands",
+    "--permission-mode", "bypassPermissions",
+  ], {
+    env: cleanEnv,
+    encoding: "utf-8",
+    timeout: 30_000,
+    shell: IS_WIN,
+  }, (err, stdout, stderr) => {
+    claudeProbeInFlight = false;
+    let present = false;
+    let reason: string | undefined;
+    if (!err) {
+      present = isClaudeProbeSuccess(stdout as string);
+      if (!present) reason = parseClaudeProbeFailure(stdout as string);
+    } else {
+      const out = String((err as any).stdout || stdout || "");
+      const se = String((err as any).stderr || stderr || "");
+      reason = parseClaudeProbeFailure(`${out}\n${se}\n${(err as any).message || ""}`);
+    }
+    authPresenceCache.set("claude", { present, reason, checkedAt: Date.now() });
+  });
+}
+
+// Explicitly trigger a background probe — call after successful OAuth login.
+export function kickClaudeProbeBackground(): void {
+  authPresenceCache.delete("claude");
+  runClaudeProbeBackground();
+}
+
 export function getClaudeSubscriptionAuthStatus(): { present: boolean; reason?: string } {
   const cached = authPresenceCache.get("claude");
   const now = Date.now();
   if (cached && now - cached.checkedAt < AUTH_CHECK_TTL_MS) {
     return { present: cached.present, reason: cached.reason };
   }
-  let present = false;
-  let reason: string | undefined;
-  try {
-    const cleanEnv = { ...process.env };
-    delete cleanEnv.ANTHROPIC_API_KEY;
-    const out = execFileSync("claude", [
-      "-p", "Reply with exactly OK.",
-      "--model", "claude-sonnet-4-6",
-      "--output-format", "json",
-      "--verbose",
-      "--no-session-persistence",
-      "--setting-sources", "user",
-      "--disable-slash-commands",
-      "--permission-mode", "bypassPermissions",
-    ], {
-      env: cleanEnv,
-      encoding: "utf-8",
-      stdio: ["ignore", "pipe", "pipe"],
-      // Cold-start on Windows with subscription MCP servers can take 10-15s.
-      // Generous timeout — cached for AUTH_CHECK_TTL_MS so it's rarely re-run.
-      timeout: 30_000,
-      shell: IS_WIN,
-    });
-    present = isClaudeProbeSuccess(out);
-    if (!present) reason = parseClaudeProbeFailure(out);
-  } catch (err: any) {
-    present = false;
-    const out = Buffer.isBuffer(err?.stdout) ? err.stdout.toString("utf-8") : String(err?.stdout || "");
-    const stderr = Buffer.isBuffer(err?.stderr) ? err.stderr.toString("utf-8") : String(err?.stderr || "");
-    reason = parseClaudeProbeFailure(`${out}\n${stderr}\n${err?.message || ""}`);
-  }
-  authPresenceCache.set("claude", { present, reason, checkedAt: now });
-  return { present, reason };
+  // Cache miss — kick off a non-blocking background probe. Return stale cache
+  // if available; otherwise return a neutral pending state that will not be
+  // treated as a hard auth failure by the caller.
+  runClaudeProbeBackground();
+  if (cached) return { present: cached.present, reason: cached.reason };
+  return { present: false, reason: "Auth check in progress…" };
 }
 
 function isCodexLoggedIn(): boolean {

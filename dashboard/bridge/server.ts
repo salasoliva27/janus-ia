@@ -5,7 +5,7 @@ import type { ClientMessage, ServerMessage } from "./types.js";
 import { isValidClientMessage } from "./types.js";
 import { SessionManager } from "./session-manager.js";
 import { PermissionManager } from "./permissions.js";
-import { clearAgentAuthCache, getAgent, getClaudeSubscriptionAuthStatus, listAgentAvailability } from "./agent-registry.js";
+import { clearAgentAuthCache, getAgent, getClaudeSubscriptionAuthStatus, kickClaudeProbeBackground, listAgentAvailability, readVarFromDotfiles } from "./agent-registry.js";
 import { startWatchers, stopWatchers, broadcastInitialLearnings } from "./file-watcher.js";
 import {
   broadcastInitialProjectStates,
@@ -261,10 +261,17 @@ export function startServer(port: number): Promise<http.Server> {
           const subscriptionProbe = isUsableClaudeSubscription(baseStatus)
             ? getClaudeSubscriptionAuthStatus()
             : { present: false, reason: undefined };
+          // Only treat the probe as a hard auth failure when it explicitly
+          // returns a 401 / "Reconnect" message. Generic execution failures
+          // (CLI spawn errors, Windows PATH issues, timeouts) are transient —
+          // trust the OAuth token that claude auth status already validated.
+          const probeIsAuthError = typeof subscriptionProbe.reason === "string" &&
+            /401|Reconnect/i.test(subscriptionProbe.reason);
+          const oauthValid = isUsableClaudeSubscription(baseStatus);
           const status = {
             ...baseStatus,
-            usableForChat: isUsableClaudeSubscription(baseStatus) ? subscriptionProbe.present : false,
-            reauthRequired: isUsableClaudeSubscription(baseStatus) && !subscriptionProbe.present,
+            usableForChat: oauthValid ? (subscriptionProbe.present || !probeIsAuthError) : false,
+            reauthRequired: oauthValid && !subscriptionProbe.present && probeIsAuthError,
             authProbeReason: subscriptionProbe.reason,
           };
           if (subscriptionProbe.present) clearAgentAuthCache("claude");
@@ -369,6 +376,9 @@ export function startServer(port: number): Promise<http.Server> {
       child.on("exit", async (code, signal) => {
         claudeLoginChild = null;
         clearAgentAuthCache("claude");
+        // Kick an async probe so the availability cache is warm for the next
+        // /api/agents or /api/claude-auth/status poll. Non-blocking.
+        kickClaudeProbeBackground();
         if (!resolved) {
           const status = await getClaudeAuthStatus();
           if (isUsableClaudeSubscription(status)) {
@@ -442,7 +452,7 @@ export function startServer(port: number): Promise<http.Server> {
       // we still report envKeySet so the UI can call out the fallback path.
       execFile("codex", ["login", "status"], { timeout: 5_000, shell: process.platform === "win32" }, (err, stdout, stderr) => {
         if (err && !stdout) {
-          res.json({ loggedIn: false, error: String(err.message ?? err), envKeySet: !!process.env.OPENAI_API_KEY });
+          res.json({ loggedIn: false, error: String(err.message ?? err), envKeySet: !!(process.env.OPENAI_API_KEY || readVarFromDotfiles("OPENAI_API_KEY")) });
           return;
         }
         const out = (stdout + stderr).trim();
@@ -460,7 +470,7 @@ export function startServer(port: number): Promise<http.Server> {
           authMethod,
           email: emailMatch ? emailMatch[0] : null,
           subscriptionType: planMatch ? planMatch[1] : null,
-          envKeySet: !!process.env.OPENAI_API_KEY,
+          envKeySet: !!(process.env.OPENAI_API_KEY || readVarFromDotfiles("OPENAI_API_KEY")),
           raw: out.slice(0, 200),
         });
       });
@@ -994,7 +1004,7 @@ export function startServer(port: number): Promise<http.Server> {
     const out: Record<string, boolean> = {};
     for (const n of names) {
       if (typeof n !== "string" || !/^[A-Z_][A-Z0-9_]*$/.test(n)) continue;
-      const v = process.env[n];
+      const v = process.env[n] || readVarFromDotfiles(n);
       out[n] = typeof v === "string" && v.trim().length > 0;
     }
     res.json({ ok: true, envVars: out });
