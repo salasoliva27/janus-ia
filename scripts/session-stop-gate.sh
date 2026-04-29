@@ -21,11 +21,11 @@ WORKSPACE_NAME="$(basename "$WORKSPACE")"
 INPUT=$(cat)
 
 # ─── Anti-loop: if we've already blocked once this turn, allow ───
-STOP_ACTIVE=$(echo "$INPUT" | python3 -c "
-import json, sys
-try: d = json.loads(sys.stdin.read())
-except: d = {}
-print(d.get('stop_hook_active', False))
+STOP_ACTIVE=$(echo "$INPUT" | node -e "
+let s=''; process.stdin.on('data',c=>s+=c).on('end',()=>{
+  try { const d=JSON.parse(s); console.log(d.stop_hook_active===true?'True':'False'); }
+  catch { console.log('False'); }
+});
 " 2>/dev/null)
 
 if [ "$STOP_ACTIVE" = "True" ]; then
@@ -33,11 +33,11 @@ if [ "$STOP_ACTIVE" = "True" ]; then
 fi
 
 # ─── Skip enforcement for trivial sessions ───
-TRANSCRIPT=$(echo "$INPUT" | python3 -c "
-import json, sys
-try: d = json.loads(sys.stdin.read())
-except: d = {}
-print(d.get('transcript_path', ''))
+TRANSCRIPT=$(echo "$INPUT" | node -e "
+let s=''; process.stdin.on('data',c=>s+=c).on('end',()=>{
+  try { const d=JSON.parse(s); console.log(d.transcript_path||''); }
+  catch { console.log(''); }
+});
 " 2>/dev/null)
 
 if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
@@ -68,13 +68,11 @@ ANCHOR=$(curl -s -m 5 \
   -H "apikey: ${SUPABASE_KEY}" \
   -H "Authorization: Bearer ${SUPABASE_KEY}" 2>/dev/null || echo "[]")
 
-HAS_ANCHOR=$(echo "$ANCHOR" | python3 -c "
-import json, sys
-try:
-    data = json.loads(sys.stdin.read())
-    print('True' if isinstance(data, list) and len(data) > 0 else 'False')
-except:
-    print('False')
+HAS_ANCHOR=$(echo "$ANCHOR" | node -e "
+let s=''; process.stdin.on('data',c=>s+=c).on('end',()=>{
+  try { const d=JSON.parse(s); console.log(Array.isArray(d)&&d.length>0?'True':'False'); }
+  catch { console.log('False'); }
+});
 " 2>/dev/null)
 
 if [ "$HAS_ANCHOR" = "True" ]; then
@@ -86,13 +84,11 @@ if [ "$HAS_ANCHOR" = "True" ]; then
     -H "apikey: ${SUPABASE_KEY}" \
     -H "Authorization: Bearer ${SUPABASE_KEY}" 2>/dev/null || echo "[]")
 
-  MEMORY_COUNT=$(echo "$COUNT_RESP" | python3 -c "
-import json, sys
-try:
-    data = json.loads(sys.stdin.read())
-    print(len(data) if isinstance(data, list) else 0)
-except:
-    print(0)
+  MEMORY_COUNT=$(echo "$COUNT_RESP" | node -e "
+let s=''; process.stdin.on('data',c=>s+=c).on('end',()=>{
+  try { const d=JSON.parse(s); console.log(Array.isArray(d)?d.length:0); }
+  catch { console.log(0); }
+});
 " 2>/dev/null)
 
   if [ "${MEMORY_COUNT:-0}" -lt 3 ]; then
@@ -115,13 +111,11 @@ EOF
     -H "apikey: ${SUPABASE_KEY}" \
     -H "Authorization: Bearer ${SUPABASE_KEY}" 2>/dev/null || echo "[]")
 
-  HAS_SUMMARY=$(echo "$SUMMARY_RESP" | python3 -c "
-import json, sys
-try:
-    data = json.loads(sys.stdin.read())
-    print('True' if isinstance(data, list) and len(data) > 0 else 'False')
-except:
-    print('False')
+  HAS_SUMMARY=$(echo "$SUMMARY_RESP" | node -e "
+let s=''; process.stdin.on('data',c=>s+=c).on('end',()=>{
+  try { const d=JSON.parse(s); console.log(Array.isArray(d)&&d.length>0?'True':'False'); }
+  catch { console.log('False'); }
+});
 " 2>/dev/null)
 
   if [ "$HAS_SUMMARY" != "True" ]; then
