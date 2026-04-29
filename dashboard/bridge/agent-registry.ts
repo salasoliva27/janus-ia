@@ -82,12 +82,18 @@ const claudeAdapter: AgentAdapter = {
       "--disable-slash-commands",
     ];
     if (continueId) args.push("--resume", continueId);
-    const subscription = getClaudeSubscriptionAuthStatus();
+    // Route on the FAST `claude auth status --json` (3s timeout, cached) — not
+    // the slow chat-probe getClaudeSubscriptionAuthStatus(). The chat probe is
+    // now non-blocking and returns {present:false} on cold cache, which would
+    // route every fresh-bridge first-Claude-turn to API-key mode and (if the
+    // user's ANTHROPIC_API_KEY is invalid/expired) fail with a misleading
+    // "API key invalid" error even though OAuth is fully signed in.
+    const oauthLoggedIn = isClaudeOAuthLoggedIn();
     return {
       cli: "claude",
       args,
-      authMethod: subscription.present ? "oauth" : "api-key",
-      envUnset: subscription.present ? ["ANTHROPIC_API_KEY"] : undefined,
+      authMethod: oauthLoggedIn ? "oauth" : "api-key",
+      envUnset: oauthLoggedIn ? ["ANTHROPIC_API_KEY"] : undefined,
       outputFormat: "stream-json",
     };
   },
@@ -316,6 +322,30 @@ export function getClaudeSubscriptionAuthStatus(): { present: boolean; reason?: 
   runClaudeProbeBackground();
   if (cached) return { present: cached.present, reason: cached.reason };
   return { present: false, reason: "Auth check in progress…" };
+}
+
+// Cheap OAuth presence check — reads `claude auth status --json` (no model
+// call, no MCP load). Cached so the per-turn buildSpawn call costs ~0ms after
+// the first hit. Replaces the slow chat-probe for spawn-time routing decisions.
+function isClaudeOAuthLoggedIn(): boolean {
+  const cached = authPresenceCache.get("claude-oauth");
+  const now = Date.now();
+  if (cached && now - cached.checkedAt < AUTH_CHECK_TTL_MS) return cached.present;
+  let present = false;
+  try {
+    const out = execFileSync("claude", ["auth", "status", "--json"], {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 3_000,
+      shell: IS_WIN,
+    });
+    const parsed = JSON.parse(out);
+    present = parsed?.loggedIn === true && parsed?.authMethod === "claude.ai";
+  } catch {
+    present = false;
+  }
+  authPresenceCache.set("claude-oauth", { present, checkedAt: now });
+  return present;
 }
 
 function isCodexLoggedIn(): boolean {
