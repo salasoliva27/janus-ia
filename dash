@@ -40,14 +40,18 @@ load_env_file() {
   echo "• loaded credentials from $label"
 }
 
-# Load credentials from two safe local sources:
-#   1) <workspace>/.env — created by the dashboard for forks/shared installs.
-#   2) ~/.env           — your private dotfiles mirror; loaded last so it wins.
+# Load credentials from three safe local sources, in precedence order:
+#   1) <workspace>/.env  — created by the dashboard for forks/shared installs.
+#   2) ~/dotfiles/.env   — canonical dotfiles repo location (Windows + Mac).
+#   3) ~/.env            — legacy Codespace convention; loaded last so it wins.
 #
-# Secrets are never read from git-tracked files. If neither file exists, the UI
+# Secrets are never read from git-tracked files. If none exist, the UI
 # first-run flow asks the user to sign in or paste their own provider keys.
 load_env_file "$WORKSPACE_ROOT/.env" "workspace .env"
-if [ "$HOME/.env" != "$WORKSPACE_ROOT/.env" ]; then
+if [ "$HOME/dotfiles/.env" != "$WORKSPACE_ROOT/.env" ]; then
+  load_env_file "$HOME/dotfiles/.env" "dotfiles .env"
+fi
+if [ "$HOME/.env" != "$WORKSPACE_ROOT/.env" ] && [ "$HOME/.env" != "$HOME/dotfiles/.env" ]; then
   load_env_file "$HOME/.env" "home .env"
 fi
 if [ "$ENV_FILES_LOADED" != "1" ]; then
@@ -99,6 +103,17 @@ if [ "$WORKSPACE_ROOT" != "$DASH_HOME" ]; then
 fi
 
 cd "$DASH"
+
+# Ensure provider CLIs (claude / codex / gemini) are on PATH. When the launcher
+# is invoked from cmd.exe (double-click), the inherited PATH doesn't include
+# common per-user install locations — execFileSync("claude") in the bridge then
+# fails with ENOENT and the auth probe reports a generic failure even though
+# the CLI is installed and authorized. Idempotent prepends:
+for bin_dir in "$HOME/.local/bin" "$HOME/AppData/Roaming/npm" "$HOME/AppData/Local/Programs/Python/Python311/Scripts"; do
+  if [ -d "$bin_dir" ] && [[ ":$PATH:" != *":$bin_dir:"* ]]; then
+    export PATH="$bin_dir:$PATH"
+  fi
+done
 
 # Ensure npm/npx are on PATH. On Windows Git Bash / MSYS, fresh shells won't see
 # the MSI-installed Node until restart — so probe common install locations and

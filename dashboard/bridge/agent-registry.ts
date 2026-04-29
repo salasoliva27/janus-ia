@@ -2,7 +2,10 @@
 // Each adapter describes how to spawn the underlying CLI for a fresh turn or
 // a continuation, plus any env/credential requirements.
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, execFile } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 const IS_WIN = process.platform === "win32";
 const AUTH_CHECK_TTL_MS = 60_000;
@@ -212,8 +215,27 @@ function isCliOnPath(cli: string): boolean {
   return present;
 }
 
+// Read a single env var from common dotfiles when process.env doesn't have it.
+// Covers the case where the user set the var in ~/.bashrc / ~/.zshrc but the
+// bridge was started outside that shell (e.g. on Windows via Git Bash launcher
+// that only sources ~/.env).
+export function readVarFromDotfiles(name: string): string | undefined {
+  const home = os.homedir();
+  const candidates = [".env", ".bash_profile", ".profile", ".bashrc", ".zshrc"].map(f => path.join(home, f));
+  const re = new RegExp(`^\\s*(?:export\\s+)?${name}\\s*=\\s*["']?([^"'\\n#]+?)["']?\\s*(?:#.*)?$`, "m");
+  for (const file of candidates) {
+    try {
+      const m = fs.readFileSync(file, "utf-8").match(re);
+      if (m) return m[1].trim();
+    } catch { /* skip missing/unreadable files */ }
+  }
+  return undefined;
+}
+
 function hasEnv(name: string): boolean {
-  return typeof process.env[name] === "string" && process.env[name]!.length > 0;
+  const v = process.env[name];
+  if (typeof v === "string" && v.length > 0) return true;
+  return !!readVarFromDotfiles(name);
 }
 
 function parseClaudeProbeFailure(text: string): string {
@@ -262,7 +284,9 @@ export function getClaudeSubscriptionAuthStatus(): { present: boolean; reason?: 
       env: cleanEnv,
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
-      timeout: 8_000,
+      // Cold-start on Windows with subscription MCP servers can take 10-15s.
+      // Generous timeout — cached for AUTH_CHECK_TTL_MS so it's rarely re-run.
+      timeout: 30_000,
       shell: IS_WIN,
     });
     present = isClaudeProbeSuccess(out);
