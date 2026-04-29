@@ -185,19 +185,34 @@ kill_port() {
 kill_port "$PORT"
 sleep 0.3
 
-# Install deps if missing
-if [ ! -d "node_modules" ]; then
-  echo "• installing bridge deps..."
-  npm install --silent
-fi
-if [ ! -d "frontend/node_modules" ]; then
-  echo "• installing frontend deps..."
-  (cd frontend && npm install --silent)
-fi
-if [ -f "$WORKSPACE_ROOT/mcp-servers/memory/package.json" ] && [ ! -d "$WORKSPACE_ROOT/mcp-servers/memory/node_modules" ]; then
-  echo "• installing memory MCP deps..."
-  (cd "$WORKSPACE_ROOT/mcp-servers/memory" && npm install --silent)
-fi
+# Install or refresh deps after an auto-update. `node_modules` can exist while
+# package files changed in the pulled revision, so compare mtimes as well.
+npm_install_if_needed() {
+  local dir="$1" label="$2"
+  [ -f "$dir/package.json" ] || return 0
+  local marker="$dir/node_modules/.janus-install-stamp"
+  local needs_install=0
+  if [ ! -d "$dir/node_modules" ]; then
+    needs_install=1
+  elif [ "$dir/package.json" -nt "$marker" ]; then
+    needs_install=1
+  elif [ -f "$dir/package-lock.json" ] && [ "$dir/package-lock.json" -nt "$marker" ]; then
+    needs_install=1
+  elif [ -f "$dir/npm-shrinkwrap.json" ] && [ "$dir/npm-shrinkwrap.json" -nt "$marker" ]; then
+    needs_install=1
+  fi
+
+  if [ "$needs_install" = "1" ]; then
+    echo "• installing $label deps..."
+    (cd "$dir" && npm install --silent)
+    mkdir -p "$dir/node_modules"
+    touch "$marker"
+  fi
+}
+
+npm_install_if_needed "$DASH" "bridge"
+npm_install_if_needed "$DASH/frontend" "frontend"
+npm_install_if_needed "$WORKSPACE_ROOT/mcp-servers/memory" "memory MCP"
 
 # Provider CLIs (claude / codex / gemini) — install any that aren't on PATH.
 # Each adapter in agent-registry.ts spawns these as subprocesses; if they're

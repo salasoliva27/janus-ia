@@ -242,6 +242,9 @@ type SubscriptionAuthStatus = {
   email?: string | null;
   subscriptionType?: string | null;
   envKeySet?: boolean;
+  expiresAt?: number;
+  accessTokenExpired?: boolean;
+  oauthUnavailableReason?: string;
   error?: string;
 };
 
@@ -283,7 +286,7 @@ function SubscriptionPanel({ endpoint, title, subscriptionAuthMethod, idleHint, 
     if (phase !== 'awaiting') return;
     const t = window.setInterval(async () => {
       const d = await refresh();
-      if (d?.loggedIn && d.authMethod === subscriptionAuthMethod) {
+      if (d?.loggedIn && d.authMethod === subscriptionAuthMethod && !d.accessTokenExpired) {
         setPhase('idle');
         setUrl(null);
       }
@@ -291,20 +294,32 @@ function SubscriptionPanel({ endpoint, title, subscriptionAuthMethod, idleHint, 
     return () => window.clearInterval(t);
   }, [phase, subscriptionAuthMethod]);
 
-  const startLogin = async () => {
+  const startLogin = async (force = false) => {
+    if (status?.oauthUnavailableReason) {
+      setPhase('error');
+      setErrMsg(status.oauthUnavailableReason);
+      return;
+    }
     setPhase('starting');
     setErrMsg(null);
     try {
-      const r = await fetch(`/api/${endpoint}/login`, { method: 'POST' });
+      const r = await fetch(`/api/${endpoint}/login${force ? '?force=1' : ''}`, { method: 'POST' });
       const d = await r.json();
-      if (!r.ok || !d.url) {
+      if (d.status) setStatus(d.status);
+      if (d.loggedIn) {
+        if (!d.status) await refresh();
+        setPhase('idle');
+        setUrl(null);
+        return;
+      }
+      if (!r.ok || (!d.url && !d.opened)) {
         setPhase('error');
         setErrMsg(d.error || 'failed to start login');
         return;
       }
-      setUrl(d.url);
+      setUrl(d.url || null);
       setPhase('awaiting');
-      window.open(d.url, '_blank', 'noopener');
+      if (d.url) window.open(d.url, '_blank', 'noopener');
     } catch (e) {
       setPhase('error');
       setErrMsg(String(e));
@@ -321,21 +336,47 @@ function SubscriptionPanel({ endpoint, title, subscriptionAuthMethod, idleHint, 
     }
   };
 
-  const subActive = status?.loggedIn && status?.authMethod === subscriptionAuthMethod;
+  const signedInSubscription = status?.loggedIn && status?.authMethod === subscriptionAuthMethod;
+  const subActive = signedInSubscription && !status?.accessTokenExpired;
+  const subscriptionExpired = signedInSubscription && status?.accessTokenExpired;
+  const loginUnavailableReason = status?.oauthUnavailableReason;
+  const loginDisabled = phase === 'starting' || phase === 'awaiting' || !!loginUnavailableReason;
 
   return (
     <div className="credentials__sub-panel">
       <div className="credentials__sub-panel-head">
         <span className="credentials__sub-panel-title">{title}</span>
         {subActive ? (
-          <button className="credentials__test-btn credentials__test-btn--pass" onClick={signOut}>
-            sign out
+          <>
+            {!loginUnavailableReason && (
+              <button className="credentials__save-btn" onClick={() => startLogin(true)} disabled={loginDisabled}>
+                {phase === 'starting' ? 'starting…' : phase === 'awaiting' ? 'waiting for browser…' : 'reconnect'}
+              </button>
+            )}
+            <button className="credentials__test-btn credentials__test-btn--pass" onClick={signOut}>
+              sign out
+            </button>
+          </>
+        ) : subscriptionExpired ? (
+          <>
+            {!loginUnavailableReason && (
+              <button className="credentials__save-btn" onClick={() => startLogin()} disabled={loginDisabled}>
+                {phase === 'starting' ? 'starting…' : phase === 'awaiting' ? 'waiting for browser…' : 'refresh login'}
+              </button>
+            )}
+            <button className="credentials__test-btn" onClick={signOut}>
+              sign out
+            </button>
+          </>
+        ) : loginUnavailableReason ? (
+          <button className="credentials__save-btn" disabled>
+            local only
           </button>
         ) : (
           <button
             className="credentials__save-btn"
-            onClick={startLogin}
-            disabled={phase === 'starting' || phase === 'awaiting'}
+            onClick={() => startLogin()}
+            disabled={loginDisabled}
           >
             {phase === 'starting' ? 'starting…' : phase === 'awaiting' ? 'waiting for browser…' : 'use subscription'}
           </button>
@@ -353,19 +394,37 @@ function SubscriptionPanel({ endpoint, title, subscriptionAuthMethod, idleHint, 
           )}
         </div>
       )}
-      {!subActive && phase === 'awaiting' && url && (
+      {loginUnavailableReason && phase !== 'awaiting' && (
+        <div className="credentials__sub-panel-line credentials__sub-panel-warn">
+          {loginUnavailableReason}
+        </div>
+      )}
+      {subscriptionExpired && phase !== 'awaiting' && (
         <div className="credentials__sub-panel-line">
-          A browser tab opened. If it didn't,{' '}
-          <a href={url} target="_blank" rel="noreferrer noopener" className="credentials__howto-link">
-            click here ↗
-          </a>{' '}
-          to finish signing in. This panel will update automatically.
+          Local OAuth token is expired
+          {status?.email ? <> for <strong>{status.email}</strong></> : null}
+          {loginUnavailableReason ? '. Refresh it from a local dashboard or local Claude CLI.' : '. Refresh the login to restore Claude chat.'}
+        </div>
+      )}
+      {!subActive && phase === 'awaiting' && (
+        <div className="credentials__sub-panel-line">
+          {url ? (
+            <>
+              A browser tab opened. If it didn't,{' '}
+              <a href={url} target="_blank" rel="noreferrer noopener" className="credentials__howto-link">
+                click here ↗
+              </a>{' '}
+              to finish signing in. This panel will update automatically.
+            </>
+          ) : (
+            <>Finish the authorization in the browser tab. This panel will update automatically.</>
+          )}
         </div>
       )}
       {phase === 'error' && errMsg && (
         <div className="credentials__test-error">{errMsg}</div>
       )}
-      {!subActive && phase === 'idle' && (
+      {!subActive && phase === 'idle' && !loginUnavailableReason && (
         <div className="credentials__sub-panel-line credentials__sub-panel-hint">
           {idleHint}
         </div>

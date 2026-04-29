@@ -18,7 +18,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
 import { McpSupervisor, defaultSidecars } from "./mcp-supervisor.js";
 import { mountAuth } from "./auth.js";
 import { syncCodexMcpConfig } from "./codex-config.js";
@@ -32,6 +32,9 @@ const DASH_HOME = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT || DASH_HOME;
 const WORKSPACE_NAME = path.basename(WORKSPACE_ROOT);
 const ENGINE_PROJECT_DIR = workspaceStateSlug(WORKSPACE_ROOT);
+const IS_CODESPACES = process.env.CODESPACES === "true" || !!process.env.CODESPACE_NAME;
+const CLAUDE_CODESPACES_OAUTH_MESSAGE =
+  "Claude subscription OAuth cannot be completed from Codespaces because Claude redirects to a localhost callback owned by the CLI process. Run the dashboard or Claude CLI from your local machine to refresh subscription auth, or use ANTHROPIC_API_KEY in this Codespace.";
 const UPLOADS_DIR = path.join(WORKSPACE_ROOT, "dump", "uploads");
 const JANUS_STATE_DIR = path.join(os.homedir(), ".janus", "projects", ENGINE_PROJECT_DIR);
 const LEGACY_CLAUDE_STATE_DIR = path.join(os.homedir(), ".claude", "projects", ENGINE_PROJECT_DIR);
@@ -187,44 +190,129 @@ export function startServer(port: number): Promise<http.Server> {
   // ─── Claude subscription auth (drives `claude auth ...` CLI) ────
   // Holds the active `claude auth login` child while we wait for the user
   // to complete the OAuth flow in their browser. One at a time.
-  let claudeLoginChild: import("node:child_process").ChildProcess | null = null;
+  type LoginChild = import("node:child_process").ChildProcess;
+  function isLoginChildRunning(child: LoginChild | null): child is LoginChild {
+    return child !== null && child.exitCode === null && child.signalCode === null;
+  }
+
+  let claudeLoginChild: LoginChild | null = null;
   let claudeLoginUrl: string | null = null;
 
-  app.get("/api/claude-auth/status", async (_req, res) => {
+  function claudeCleanEnv(): NodeJS.ProcessEnv {
+    const cleanEnv = { ...process.env };
+    delete cleanEnv.ANTHROPIC_API_KEY;
+    return cleanEnv;
+  }
+
+  function readClaudeCredentialMeta(): { expiresAt?: number; accessTokenExpired?: boolean } {
+    try {
+      const file = path.join(os.homedir(), ".claude", ".credentials.json");
+      const parsed = JSON.parse(fs.readFileSync(file, "utf-8"));
+      const expiresAt = Number(parsed?.claudeAiOauth?.expiresAt);
+      if (!Number.isFinite(expiresAt)) return {};
+      return { expiresAt, accessTokenExpired: expiresAt <= Date.now() };
+    } catch {
+      return {};
+    }
+  }
+
+  type ClaudeAuthStatus = {
+    loggedIn?: boolean;
+    authMethod?: string;
+    envKeySet?: boolean;
+    expiresAt?: number;
+    accessTokenExpired?: boolean;
+    oauthUnavailableReason?: string;
+    error?: string;
+    raw?: string;
+    [key: string]: unknown;
+  };
+
+  function isUsableClaudeSubscription(status: ClaudeAuthStatus): boolean {
+    return status.loggedIn === true &&
+      status.authMethod === "claude.ai" &&
+      status.accessTokenExpired !== true;
+  }
+
+  function addClaudeOAuthAvailability(status: ClaudeAuthStatus): ClaudeAuthStatus {
+    if (!IS_CODESPACES) return status;
+    return {
+      ...status,
+      oauthUnavailableReason: CLAUDE_CODESPACES_OAUTH_MESSAGE,
+    };
+  }
+
+  function getClaudeAuthStatus(): Promise<ClaudeAuthStatus> {
     // claude auth status hides OAuth subscription details when ANTHROPIC_API_KEY
     // is in env (env wins, so it reports the env source instead). Strip the env
     // var for this probe so the UI sees the true subscription state.
-    const cleanEnv = { ...process.env };
-    delete cleanEnv.ANTHROPIC_API_KEY;
-    try {
-      const { execFile } = await import("node:child_process");
-      execFile("claude", ["auth", "status", "--json"], { env: cleanEnv, timeout: 5_000 }, (err, stdout) => {
+    return new Promise((resolveStatus) => {
+      execFile("claude", ["auth", "status", "--json"], { env: claudeCleanEnv(), timeout: 5_000, shell: process.platform === "win32" }, (err, stdout) => {
         if (err && !stdout) {
-          res.json({ loggedIn: false, error: String(err.message ?? err) });
+          resolveStatus({ loggedIn: false, error: String(err.message ?? err) });
           return;
         }
         try {
           const parsed = JSON.parse(stdout);
-          res.json({ ...parsed, envKeySet: !!process.env.ANTHROPIC_API_KEY });
+          resolveStatus(addClaudeOAuthAvailability({ ...parsed, ...readClaudeCredentialMeta(), envKeySet: !!process.env.ANTHROPIC_API_KEY }));
         } catch {
-          res.json({ loggedIn: false, error: "could not parse claude output", raw: stdout.slice(0, 200) });
+          resolveStatus({ loggedIn: false, error: "could not parse claude output", raw: stdout.slice(0, 200) });
         }
       });
+    });
+  }
+
+  app.get("/api/claude-auth/status", async (_req, res) => {
+    try {
+      res.json(await getClaudeAuthStatus());
     } catch (err) {
       res.status(500).json({ loggedIn: false, error: String(err) });
     }
   });
 
-  app.post("/api/claude-auth/login", async (_req, res) => {
-    if (claudeLoginChild && !claudeLoginChild.killed) {
-      // Already mid-flow — return the same URL so the UI can re-open it.
-      res.json({ url: claudeLoginUrl, alreadyRunning: true });
+  app.post("/api/claude-auth/login", async (req, res) => {
+    const force = req.query.force === "1";
+    const status = await getClaudeAuthStatus();
+    if (!force && isUsableClaudeSubscription(status)) {
+      res.json({ loggedIn: true, alreadyLoggedIn: true, status });
+      return;
+    }
+
+    if (IS_CODESPACES) {
+      if (isLoginChildRunning(claudeLoginChild)) {
+        try { claudeLoginChild.kill(); } catch { /* ignore */ }
+      }
+      claudeLoginChild = null;
+      claudeLoginUrl = null;
+      res.status(409).json({ error: CLAUDE_CODESPACES_OAUTH_MESSAGE, status });
+      return;
+    }
+
+    if (claudeLoginChild && !isLoginChildRunning(claudeLoginChild)) {
+      claudeLoginChild = null;
+      claudeLoginUrl = null;
+    }
+    if (isLoginChildRunning(claudeLoginChild)) {
+      // Already mid-flow. Newer Claude builds may open the browser directly
+      // without printing a URL, so a null URL still means "keep waiting".
+      res.json({ url: claudeLoginUrl, opened: !claudeLoginUrl, alreadyRunning: true });
       return;
     }
     try {
-      const { spawn } = await import("node:child_process");
-      const cleanEnv: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0" };
-      delete cleanEnv.ANTHROPIC_API_KEY;
+      const cleanEnv: NodeJS.ProcessEnv = { ...claudeCleanEnv(), NO_COLOR: "1", FORCE_COLOR: "0" };
+      if (force) {
+        try {
+          execFileSync("claude", ["auth", "logout"], {
+            env: cleanEnv,
+            timeout: 5_000,
+            shell: process.platform === "win32",
+            stdio: "ignore",
+          });
+        } catch {
+          // Continue into login; logout may report "not logged in" or be
+          // shadowed by a broken token, and login is still the repair path.
+        }
+      }
       const child = spawn("claude", ["auth", "login", "--claudeai"], {
         env: cleanEnv,
         stdio: ["ignore", "pipe", "pipe"],
@@ -243,9 +331,9 @@ export function startServer(port: number): Promise<http.Server> {
 
       const tryExtractUrl = () => {
         // Strip ANSI escapes that --claudeai sometimes still emits, then look
-        // for the first https://claude.ai/... URL.
+        // for the first current Claude/Anthropic OAuth URL.
         const clean = buf.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "");
-        const m = clean.match(/https:\/\/(?:claude\.ai|console\.anthropic\.com)\/[^\s\)\]\}>"']+/);
+        const m = clean.match(/https:\/\/(?:(?:www\.)?claude\.ai|(?:www\.)?claude\.com|platform\.claude\.com|console\.anthropic\.com)\/[^\s\)\]\}>"']+/);
         if (m) {
           claudeLoginUrl = m[0];
           finish(200, { url: m[0] });
@@ -254,20 +342,38 @@ export function startServer(port: number): Promise<http.Server> {
 
       child.stdout?.on("data", (d) => { buf += d.toString(); tryExtractUrl(); });
       child.stderr?.on("data", (d) => { buf += d.toString(); tryExtractUrl(); });
-      child.on("exit", () => {
+      child.on("exit", async (code, signal) => {
         claudeLoginChild = null;
-        if (!resolved) finish(500, { error: "claude exited before printing a URL", raw: buf.slice(0, 500) });
+        if (!resolved) {
+          const status = await getClaudeAuthStatus();
+          if (isUsableClaudeSubscription(status)) {
+            finish(200, { loggedIn: true, alreadyLoggedIn: true, status });
+            return;
+          }
+          finish(500, {
+            error: "claude exited before opening an OAuth flow",
+            exitCode: code,
+            signal,
+            raw: buf.slice(0, 500),
+          });
+        }
       });
       child.on("error", (e) => {
         claudeLoginChild = null;
         if (!resolved) finish(500, { error: String(e.message ?? e) });
       });
 
-      // Safety: if no URL appears in 8s, give up.
+      // Safety: if no URL appears in 8s, do not kill the CLI. Claude Code
+      // often opens the browser itself and never prints a URL on stdout/stderr.
+      // Return success so the UI can poll auth status while the child process
+      // stays alive to receive the OAuth callback.
       setTimeout(() => {
         if (!resolved) {
-          try { child.kill(); } catch { /* ignore */ }
-          finish(500, { error: "timed out waiting for OAuth URL", raw: buf.slice(0, 500) });
+          finish(200, {
+            opened: true,
+            message: "Claude OAuth is running. Finish the browser authorization, then this panel will update.",
+            raw: buf.slice(0, 500),
+          });
         }
       }, 8_000);
     } catch (err) {
@@ -278,13 +384,12 @@ export function startServer(port: number): Promise<http.Server> {
   app.post("/api/claude-auth/logout", async (_req, res) => {
     try {
       // Kill any in-flight login so it doesn't write fresh creds after we logout.
-      if (claudeLoginChild && !claudeLoginChild.killed) {
+      if (isLoginChildRunning(claudeLoginChild)) {
         try { claudeLoginChild.kill(); } catch { /* ignore */ }
         claudeLoginChild = null;
         claudeLoginUrl = null;
       }
-      const { execFile } = await import("node:child_process");
-      execFile("claude", ["auth", "logout"], { timeout: 5_000, shell: process.platform === "win32" }, (err, stdout, stderr) => {
+      execFile("claude", ["auth", "logout"], { env: claudeCleanEnv(), timeout: 5_000, shell: process.platform === "win32" }, (err, stdout, stderr) => {
         if (err) {
           res.status(500).json({ ok: false, error: String(err.message ?? err), stderr: String(stderr).slice(0, 300) });
           return;
