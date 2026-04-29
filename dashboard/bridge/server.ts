@@ -5,7 +5,7 @@ import type { ClientMessage, ServerMessage } from "./types.js";
 import { isValidClientMessage } from "./types.js";
 import { SessionManager } from "./session-manager.js";
 import { PermissionManager } from "./permissions.js";
-import { clearAgentAuthCache, getAgent, listAgentAvailability } from "./agent-registry.js";
+import { clearAgentAuthCache, getAgent, getClaudeSubscriptionAuthStatus, listAgentAvailability } from "./agent-registry.js";
 import { startWatchers, stopWatchers, broadcastInitialLearnings } from "./file-watcher.js";
 import {
   broadcastInitialProjectStates,
@@ -222,6 +222,9 @@ export function startServer(port: number): Promise<http.Server> {
     envKeySet?: boolean;
     expiresAt?: number;
     accessTokenExpired?: boolean;
+    usableForChat?: boolean;
+    reauthRequired?: boolean;
+    authProbeReason?: string;
     oauthUnavailableReason?: string;
     error?: string;
     raw?: string;
@@ -254,8 +257,17 @@ export function startServer(port: number): Promise<http.Server> {
         }
         try {
           const parsed = JSON.parse(stdout);
-          const status = addClaudeOAuthAvailability({ ...parsed, ...readClaudeCredentialMeta(), envKeySet: !!process.env.ANTHROPIC_API_KEY });
-          if (isUsableClaudeSubscription(status)) clearAgentAuthCache("claude");
+          const baseStatus = addClaudeOAuthAvailability({ ...parsed, ...readClaudeCredentialMeta(), envKeySet: !!process.env.ANTHROPIC_API_KEY });
+          const subscriptionProbe = isUsableClaudeSubscription(baseStatus)
+            ? getClaudeSubscriptionAuthStatus()
+            : { present: false, reason: undefined };
+          const status = {
+            ...baseStatus,
+            usableForChat: isUsableClaudeSubscription(baseStatus) ? subscriptionProbe.present : false,
+            reauthRequired: isUsableClaudeSubscription(baseStatus) && !subscriptionProbe.present,
+            authProbeReason: subscriptionProbe.reason,
+          };
+          if (subscriptionProbe.present) clearAgentAuthCache("claude");
           resolveStatus(status);
         } catch {
           resolveStatus({ loggedIn: false, error: "could not parse claude output", raw: stdout.slice(0, 200) });
@@ -275,9 +287,18 @@ export function startServer(port: number): Promise<http.Server> {
   app.post("/api/claude-auth/login", async (req, res) => {
     const force = req.query.force === "1";
     const status = await getClaudeAuthStatus();
+    let forceRefresh = force;
     if (!force && isUsableClaudeSubscription(status)) {
-      res.json({ loggedIn: true, alreadyLoggedIn: true, status });
-      return;
+      clearAgentAuthCache("claude");
+      const subscriptionProbe = getClaudeSubscriptionAuthStatus();
+      if (subscriptionProbe.present) {
+        res.json({ loggedIn: true, alreadyLoggedIn: true, status: { ...status, usableForChat: true, reauthRequired: false } });
+        return;
+      }
+      forceRefresh = true;
+      status.usableForChat = false;
+      status.reauthRequired = true;
+      status.authProbeReason = subscriptionProbe.reason;
     }
 
     if (IS_CODESPACES) {
@@ -302,7 +323,7 @@ export function startServer(port: number): Promise<http.Server> {
     }
     try {
       const cleanEnv: NodeJS.ProcessEnv = { ...claudeCleanEnv(), NO_COLOR: "1", FORCE_COLOR: "0" };
-      if (force) {
+      if (forceRefresh) {
         try {
           execFileSync("claude", ["auth", "logout"], {
             env: cleanEnv,
@@ -1695,7 +1716,7 @@ Do not include anything except the JSON object.`;
 
       const { spawn } = await import("node:child_process");
       const cleanEnv = { ...process.env };
-      delete cleanEnv.ANTHROPIC_API_KEY;
+      if (getClaudeSubscriptionAuthStatus().present) delete cleanEnv.ANTHROPIC_API_KEY;
       const proc = spawn(
         "claude",
         ["-p", prompt, "--output-format", "text", "--dangerously-skip-permissions", "--disable-slash-commands"],

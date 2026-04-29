@@ -354,7 +354,7 @@ export class ClaudeSession {
 
     this.send({
       type: "session_start",
-      auth: adapter.authMethod === "oauth" ? "subscription" : "api_key",
+      auth: (spawnSpec.authMethod ?? adapter.authMethod) === "oauth" ? "subscription" : "api_key",
       sessionId: this.sessionId,
     });
 

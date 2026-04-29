@@ -72,7 +72,9 @@ async function fetchProviderReadiness(): Promise<{
   }
   const claudeLoggedIn = claudeRes.status === 'fulfilled'
     && claudeRes.value?.loggedIn
-    && claudeRes.value?.authMethod === 'claude.ai';
+    && claudeRes.value?.authMethod === 'claude.ai'
+    && !claudeRes.value?.accessTokenExpired
+    && !claudeRes.value?.reauthRequired;
   const codexLoggedIn = codexRes.status === 'fulfilled'
     && codexRes.value?.loggedIn
     && codexRes.value?.authMethod === 'chatgpt';
@@ -117,14 +119,19 @@ export function FirstRunOnboarding({ onOpenCredentials }: { onOpenCredentials: (
     try {
       const r = await fetch(`/api/${slot.subscriptionEndpoint}/login`, { method: 'POST' });
       const d = await r.json();
-      if (!r.ok || !d.url) {
+      if (d.loggedIn) {
+        setPending(p => ({ ...p, [slot.id]: 'idle' }));
+        await checkReadiness();
+        return;
+      }
+      if (!r.ok || (!d.url && !d.opened)) {
         setPending(p => ({ ...p, [slot.id]: 'error' }));
         setErrors(e => ({ ...e, [slot.id]: d.error || 'failed to start login' }));
         return;
       }
-      setAuthUrls(u => ({ ...u, [slot.id]: d.url }));
+      if (d.url) setAuthUrls(u => ({ ...u, [slot.id]: d.url }));
       setPending(p => ({ ...p, [slot.id]: 'awaiting' }));
-      window.open(d.url, '_blank', 'noopener');
+      if (d.url && slot.subscriptionEndpoint !== 'claude-auth') window.open(d.url, '_blank', 'noopener');
     } catch (err) {
       setPending(p => ({ ...p, [slot.id]: 'error' }));
       setErrors(e => ({ ...e, [slot.id]: String(err) }));

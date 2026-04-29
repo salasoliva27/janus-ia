@@ -244,6 +244,9 @@ type SubscriptionAuthStatus = {
   envKeySet?: boolean;
   expiresAt?: number;
   accessTokenExpired?: boolean;
+  usableForChat?: boolean;
+  reauthRequired?: boolean;
+  authProbeReason?: string;
   oauthUnavailableReason?: string;
   error?: string;
 };
@@ -257,12 +260,11 @@ type SubscriptionPanelProps = {
   subscriptionAuthMethod: string;
   /** Bottom-line help text shown when nothing is in flight */
   idleHint: React.ReactNode;
-  /** Env var whose presence forces API-key fallback at runtime (overrides subscription).
-   *  Only Claude has this quirk — pass null for providers where env+subscription coexist. */
-  envOverridesSubscription?: { envVar: string } | null;
+  /** Env var kept as fallback when subscription auth is not usable. */
+  apiFallbackEnvVar?: string | null;
 };
 
-function SubscriptionPanel({ endpoint, title, subscriptionAuthMethod, idleHint, envOverridesSubscription }: SubscriptionPanelProps) {
+function SubscriptionPanel({ endpoint, title, subscriptionAuthMethod, idleHint, apiFallbackEnvVar }: SubscriptionPanelProps) {
   const [status, setStatus] = useState<SubscriptionAuthStatus | null>(null);
   const [phase, setPhase] = useState<'idle' | 'starting' | 'awaiting' | 'error'>('idle');
   const [url, setUrl] = useState<string | null>(null);
@@ -277,7 +279,7 @@ function SubscriptionPanel({ endpoint, title, subscriptionAuthMethod, idleHint, 
       const r = await fetch(`/api/${endpoint}/status`);
       const d = await r.json();
       setStatus(d);
-      if (d?.loggedIn && d.authMethod === subscriptionAuthMethod && !d.accessTokenExpired) {
+      if (d?.loggedIn && d.authMethod === subscriptionAuthMethod && !d.accessTokenExpired && !d.reauthRequired) {
         notifyCredentialsChanged();
       }
       return d as SubscriptionAuthStatus;
@@ -293,7 +295,7 @@ function SubscriptionPanel({ endpoint, title, subscriptionAuthMethod, idleHint, 
     if (phase !== 'awaiting') return;
     const t = window.setInterval(async () => {
       const d = await refresh();
-      if (d?.loggedIn && d.authMethod === subscriptionAuthMethod && !d.accessTokenExpired) {
+      if (d?.loggedIn && d.authMethod === subscriptionAuthMethod && !d.accessTokenExpired && !d.reauthRequired) {
         setPhase('idle');
         setUrl(null);
         notifyCredentialsChanged();
@@ -348,8 +350,8 @@ function SubscriptionPanel({ endpoint, title, subscriptionAuthMethod, idleHint, 
 
   const signedInSubscription = status?.loggedIn && status?.authMethod === subscriptionAuthMethod;
   const statusLoading = status === null;
-  const subActive = signedInSubscription && !status?.accessTokenExpired;
-  const subscriptionExpired = signedInSubscription && status?.accessTokenExpired;
+  const subscriptionNeedsRefresh = signedInSubscription && (status?.accessTokenExpired || status?.reauthRequired);
+  const subActive = signedInSubscription && !subscriptionNeedsRefresh;
   const loginUnavailableReason = status?.oauthUnavailableReason;
   const loginDisabled = statusLoading || phase === 'starting' || phase === 'awaiting' || !!loginUnavailableReason;
 
@@ -365,11 +367,11 @@ function SubscriptionPanel({ endpoint, title, subscriptionAuthMethod, idleHint, 
           <button className="credentials__test-btn credentials__test-btn--pass" onClick={signOut}>
             sign out
           </button>
-        ) : subscriptionExpired ? (
+        ) : subscriptionNeedsRefresh ? (
           <>
             {!loginUnavailableReason && (
-              <button className="credentials__save-btn" onClick={() => startLogin()} disabled={loginDisabled}>
-                {phase === 'starting' ? 'starting…' : phase === 'awaiting' ? 'waiting for browser…' : 'refresh login'}
+              <button className="credentials__save-btn" onClick={() => startLogin(true)} disabled={loginDisabled}>
+                {phase === 'starting' ? 'starting…' : phase === 'awaiting' ? 'waiting for browser…' : status?.reauthRequired ? 'reauthorize' : 'refresh login'}
               </button>
             )}
             <button className="credentials__test-btn" onClick={signOut}>
@@ -395,9 +397,9 @@ function SubscriptionPanel({ endpoint, title, subscriptionAuthMethod, idleHint, 
           ✓ Signed in
           {status?.email ? <> as <strong>{status.email}</strong></> : null}
           {status?.subscriptionType ? <> · plan: {status.subscriptionType}</> : null}
-          {envOverridesSubscription && status?.envKeySet && (
+          {apiFallbackEnvVar && status?.envKeySet && (
             <span className="credentials__sub-panel-warn">
-              {' '}— {envOverridesSubscription.envVar} is set in env, which overrides subscription auth at runtime. Clear it from dotfiles if you want chat to use your subscription quota.
+              {' '}— {apiFallbackEnvVar} is saved as fallback. Subscription auth takes precedence.
             </span>
           )}
         </div>
@@ -407,11 +409,12 @@ function SubscriptionPanel({ endpoint, title, subscriptionAuthMethod, idleHint, 
           {loginUnavailableReason}
         </div>
       )}
-      {subscriptionExpired && phase !== 'awaiting' && (
+      {subscriptionNeedsRefresh && phase !== 'awaiting' && (
         <div className="credentials__sub-panel-line">
-          Local OAuth token is expired
+          {status?.reauthRequired ? 'Claude Code could not use the saved subscription login' : 'Local OAuth token is expired'}
           {status?.email ? <> for <strong>{status.email}</strong></> : null}
-          {loginUnavailableReason ? '. Refresh it from a local dashboard or local Claude CLI.' : '. Refresh the login to restore Claude chat.'}
+          {status?.authProbeReason ? <> — {status.authProbeReason}</> : null}
+          {loginUnavailableReason ? '. Refresh it from a local dashboard or local Claude CLI.' : '. Reauthorize to restore subscription chat.'}
         </div>
       )}
       {!subActive && phase === 'awaiting' && (
@@ -897,7 +900,7 @@ export function Credentials({ onClose, initialProviderId }: { onClose: () => voi
                         endpoint="claude-auth"
                         title="Claude subscription (Pro / Max)"
                         subscriptionAuthMethod="claude.ai"
-                        envOverridesSubscription={{ envVar: 'ANTHROPIC_API_KEY' }}
+                        apiFallbackEnvVar="ANTHROPIC_API_KEY"
                         idleHint={<>Sign in with your Anthropic account instead of pasting an API key. Same flow as <code>claude auth login</code>.</>}
                       />
                     )}
@@ -906,6 +909,7 @@ export function Credentials({ onClose, initialProviderId }: { onClose: () => voi
                         endpoint="codex-auth"
                         title="ChatGPT subscription (Plus / Pro / Team)"
                         subscriptionAuthMethod="chatgpt"
+                        apiFallbackEnvVar="OPENAI_API_KEY"
                         idleHint={<>Sign in with your ChatGPT account to use your subscription quota instead of pasting an API key. Same flow as <code>codex login</code>.</>}
                       />
                     )}

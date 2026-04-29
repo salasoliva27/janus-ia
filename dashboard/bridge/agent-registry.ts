@@ -17,6 +17,8 @@ export interface AgentStartSpec {
 export interface AgentSpawn {
   cli: string;
   args: string[];
+  /** Effective credential path for this process after subscription/API fallback resolution */
+  authMethod?: "oauth" | "api-key";
   /** Extra env vars to set or override for the child process */
   envPatch?: Record<string, string>;
   /** Env vars to explicitly unset before spawn (e.g. ANTHROPIC_API_KEY for claude's OAuth) */
@@ -48,10 +50,8 @@ export interface AgentAdapter {
 }
 
 // ── Claude Code ──────────────────────────────────────
-// Uses the Anthropic subscription via OAuth by default. `claude` gives
-// ANTHROPIC_API_KEY precedence over OAuth, so a stale API key can break chat
-// even when `claude auth login` is valid. Keep dashboard chat on OAuth unless
-// explicitly overridden for an API-key-only install.
+// Uses the Anthropic subscription via OAuth whenever it is usable. API keys are
+// fallback credentials only; a signed-in subscription takes precedence.
 const claudeModels: ModelOption[] = [
   { id: "claude-opus-4-7",         label: "Opus 4.7",   note: "latest, most capable" },
   { id: "claude-opus-4-6",         label: "Opus 4.6",   note: "prior Opus" },
@@ -79,11 +79,12 @@ const claudeAdapter: AgentAdapter = {
       "--disable-slash-commands",
     ];
     if (continueId) args.push("--resume", continueId);
-    const forceApiKey = process.env.CLAUDE_USE_ANTHROPIC_API_KEY === "1";
+    const subscription = getClaudeSubscriptionAuthStatus();
     return {
       cli: "claude",
       args,
-      envUnset: forceApiKey ? undefined : ["ANTHROPIC_API_KEY"],
+      authMethod: subscription.present ? "oauth" : "api-key",
+      envUnset: subscription.present ? ["ANTHROPIC_API_KEY"] : undefined,
       outputFormat: "stream-json",
     };
   },
@@ -127,7 +128,14 @@ const codexAdapter: AgentAdapter = {
     }
     if (continueId) args.push(continueId);
     args.push(prompt);
-    return { cli: "codex", args, outputFormat: "codex-json" };
+    const subscription = isCodexLoggedIn();
+    return {
+      cli: "codex",
+      args,
+      authMethod: subscription ? "oauth" : "api-key",
+      envUnset: subscription ? ["OPENAI_API_KEY", "CODEX_API_KEY"] : undefined,
+      outputFormat: "codex-json",
+    };
   },
 };
 
@@ -210,7 +218,7 @@ function hasEnv(name: string): boolean {
 
 function parseClaudeProbeFailure(text: string): string {
   if (/401|authentication/i.test(text)) {
-    return "Claude CLI auth returns 401. Reconnect Claude in Keys, run `claude auth login`, or set CLAUDE_USE_ANTHROPIC_API_KEY=1 with a valid ANTHROPIC_API_KEY.";
+    return "Claude subscription auth returns 401. Reconnect Claude in Credentials or run `claude auth login`.";
   }
   if (/timeout/i.test(text)) return "Claude CLI auth probe timed out.";
   return "Claude CLI auth probe failed.";
@@ -230,7 +238,7 @@ function isClaudeProbeSuccess(text: string): boolean {
   }
 }
 
-function getClaudeAuthStatus(): { present: boolean; reason?: string } {
+export function getClaudeSubscriptionAuthStatus(): { present: boolean; reason?: string } {
   const cached = authPresenceCache.get("claude");
   const now = Date.now();
   if (cached && now - cached.checkedAt < AUTH_CHECK_TTL_MS) {
@@ -240,8 +248,7 @@ function getClaudeAuthStatus(): { present: boolean; reason?: string } {
   let reason: string | undefined;
   try {
     const cleanEnv = { ...process.env };
-    const forceApiKey = process.env.CLAUDE_USE_ANTHROPIC_API_KEY === "1";
-    if (!forceApiKey) delete cleanEnv.ANTHROPIC_API_KEY;
+    delete cleanEnv.ANTHROPIC_API_KEY;
     const out = execFileSync("claude", [
       "-p", "Reply with exactly OK.",
       "--model", "claude-sonnet-4-6",
@@ -296,13 +303,20 @@ export function listAgentAvailability(): AgentAvailability[] {
     const envVar = a.envVarRequired ?? (a.id === "claude" ? "ANTHROPIC_API_KEY" : null);
     const envPresent = a.envVarRequired ? hasEnv(a.envVarRequired) : true;
     const claudeAuth = a.id === "claude" && cliInstalled
-      ? getClaudeAuthStatus()
+      ? getClaudeSubscriptionAuthStatus()
       : { present: false, reason: undefined };
+    const claudeApiKeyPresent = a.id === "claude" && hasEnv("ANTHROPIC_API_KEY");
+    const codexLoggedIn = a.id === "codex" && cliInstalled ? isCodexLoggedIn() : false;
     const authPresent = a.id === "codex"
-      ? hasEnv("OPENAI_API_KEY") || hasEnv("CODEX_API_KEY") || (cliInstalled && isCodexLoggedIn())
+      ? codexLoggedIn || hasEnv("OPENAI_API_KEY") || hasEnv("CODEX_API_KEY")
       : a.id === "claude"
-        ? claudeAuth.present
+        ? claudeAuth.present || claudeApiKeyPresent
         : envPresent;
+    const authMethod = a.id === "claude"
+      ? (claudeAuth.present ? "oauth" : "api-key")
+      : a.id === "codex"
+        ? (codexLoggedIn ? "oauth" : "api-key")
+        : a.authMethod;
     const available = cliInstalled && authPresent;
     let reason: string | undefined;
     if (!cliInstalled) {
@@ -310,14 +324,14 @@ export function listAgentAvailability(): AgentAvailability[] {
     } else if (!authPresent && a.id === "codex") {
       reason = "Run codex login or set OPENAI_API_KEY/CODEX_API_KEY";
     } else if (!authPresent && a.id === "claude") {
-      reason = claudeAuth.reason || "Run Claude auth login or set ANTHROPIC_API_KEY";
+      reason = claudeAuth.reason || "Sign in with Claude subscription or set ANTHROPIC_API_KEY";
     } else if (!authPresent && a.envVarRequired) {
       reason = `Missing ${a.envVarRequired}`;
     }
     return {
       id: a.id,
       label: a.label,
-      authMethod: a.authMethod,
+      authMethod,
       models: a.models,
       defaultModel: a.defaultModel,
       cli: a.cli,
