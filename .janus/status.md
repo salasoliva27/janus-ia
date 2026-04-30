@@ -4,6 +4,9 @@ stage: dev
 phase: ""
 phaseProgress: 0
 summary: "Personal venture OS — validates ideas, builds products, manages legal/financial/calendar across all projects, learns from every build."
+lastSyncedAt: "2026-04-30T19:01:15.560Z"
+lastSyncedCommit: "858ad87"
+lastSyncedCommitMessage: "fix(claude-spawn): route auth on fast claude-auth-status, not slow chat-probe"
 ---
 
 ## Next Steps
